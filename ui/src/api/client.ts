@@ -54,15 +54,14 @@ async function apiFetch<T>(
 
     if (!response.ok) {
       const errorData: APIError = await response.json().catch(() => ({
-        error: `HTTP ${response.status}: ${response.statusText}`,
-        code: `HTTP_${response.status}`,
+        error: `HTTP_${response.status}`,
+        message: `HTTP ${response.status}: ${response.statusText}`,
         correlation_id: corrId,
-        timestamp: new Date().toISOString(),
       }));
 
       throw new APIClientError(
-        errorData.error,
-        errorData.code,
+        errorData.message || errorData.error,  // Use message if available, fallback to error type
+        errorData.error,                        // Error type/code
         errorData.correlation_id
       );
     }
@@ -160,15 +159,18 @@ export const proposalsApi = {
     request: DecisionRequest,
     correlationId?: string
   ): Promise<APIResponse<Decision>> => {
+    const body = {
+      approved: request.approved,
+      approved_by: request.approved_by || 'operator', // Default to 'operator' if not set
+      reason: request.reason || '',
+      conditions: request.conditions,
+    };
+    console.log('[submitDecision] Request body:', body);
     return apiFetch<Decision>(
       `/api/v1/proposals/${encodeURIComponent(request.proposal_id)}/decide`,
       {
         method: 'POST',
-        body: JSON.stringify({
-          approved: request.approved,
-          reason: request.reason,
-          conditions: request.conditions,
-        }),
+        body: JSON.stringify(body),
       },
       correlationId
     );
@@ -288,6 +290,34 @@ export const healthApi = {
   },
 };
 
+// Clear all data response
+interface ClearAllResponse {
+  success: boolean;
+  message: string;
+  deleted: {
+    tracks: number;
+    proposals: number;
+    decisions: number;
+    effects: number;
+    detections: number;
+  };
+  correlation_id: string;
+}
+
+// Clear API endpoints
+export const clearApi = {
+  // Clear all tracks, proposals, decisions, and effects
+  clearAll: async (correlationId?: string): Promise<APIResponse<ClearAllResponse>> => {
+    return apiFetch<ClearAllResponse>(
+      '/api/v1/clear',
+      {
+        method: 'POST',
+      },
+      correlationId
+    );
+  },
+};
+
 // Export all APIs as a single object
 export const api = {
   tracks: tracksApi,
@@ -297,6 +327,7 @@ export const api = {
   metrics: metricsApi,
   audit: auditApi,
   health: healthApi,
+  clear: clearApi,
 };
 
 export default api;

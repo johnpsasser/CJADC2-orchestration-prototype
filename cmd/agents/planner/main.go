@@ -145,7 +145,29 @@ func (a *PlannerAgent) processMessage(ctx context.Context, msg jetstream.Msg) er
 		Str("classification", track.Classification).
 		Msg("Processing correlated track")
 
-	// Generate action proposal
+	// Determine action based on track characteristics
+	actionType, priority, rationale := a.determineAction(&track)
+
+	// Check if this action requires human-in-the-loop approval
+	if !a.requiresHumanApproval(actionType, priority) {
+		// Passive action - log and skip proposal creation
+		duration := time.Since(start)
+		a.RecordMessage("success", "correlated_track")
+		a.RecordLatency("correlated_track", duration)
+
+		a.logger.Info().
+			Str("correlation_id", correlationID).
+			Str("track_id", track.TrackID).
+			Str("action_type", actionType).
+			Int("priority", priority).
+			Str("rationale", rationale).
+			Dur("latency_ms", duration).
+			Msg("Passive action - no proposal required (auto-approved)")
+
+		return nil
+	}
+
+	// Generate action proposal for HITL review
 	proposal := a.generateProposal(&track)
 
 	// Validate proposal with OPA
@@ -184,7 +206,8 @@ func (a *PlannerAgent) processMessage(ctx context.Context, msg jetstream.Msg) er
 		Str("action_type", proposal.ActionType).
 		Int("priority", proposal.Priority).
 		Bool("policy_allowed", proposal.PolicyDecision.Allowed).
-		Msg("Proposal generated")
+		Bool("requires_hitl", true).
+		Msg("Proposal generated - requires human approval")
 
 	// Publish to PROPOSALS stream
 	subject := proposal.Subject()
@@ -207,7 +230,7 @@ func (a *PlannerAgent) processMessage(ctx context.Context, msg jetstream.Msg) er
 		Str("correlation_id", correlationID).
 		Str("subject", subject).
 		Dur("latency_ms", duration).
-		Msg("Published action proposal")
+		Msg("Published action proposal for HITL review")
 
 	return nil
 }
@@ -355,13 +378,38 @@ func (a *PlannerAgent) determineConstraints(track *messages.CorrelatedTrack, act
 func (a *PlannerAgent) determineExpiration(priority int) time.Duration {
 	switch {
 	case priority >= 9:
-		return 1 * time.Minute // Critical - very short window
+		return 10 * time.Minute // Critical - short window but enough time for review
 	case priority >= 7:
-		return 2 * time.Minute // High priority
+		return 15 * time.Minute // High priority
 	case priority >= 5:
-		return 5 * time.Minute // Medium priority
+		return 30 * time.Minute // Medium priority
 	default:
-		return 15 * time.Minute // Low priority - longer consideration time
+		return 60 * time.Minute // Low priority - longer consideration time
+	}
+}
+
+// requiresHumanApproval determines if an action needs human-in-the-loop approval
+// Based on CJADC2 doctrine:
+// - Kinetic/active actions (engage, intercept) ALWAYS require HITL
+// - Identification actions require HITL when priority is high
+// - Passive actions (track, monitor, ignore) do NOT require HITL
+func (a *PlannerAgent) requiresHumanApproval(actionType string, priority int) bool {
+	switch actionType {
+	case "engage":
+		// Kinetic action - ALWAYS requires human approval
+		return true
+	case "intercept":
+		// Active engagement - ALWAYS requires human approval
+		return true
+	case "identify":
+		// Identification - requires approval only for high priority (>=6)
+		return priority >= 6
+	case "track", "monitor", "ignore":
+		// Passive observation - does NOT require human approval
+		return false
+	default:
+		// Unknown action types require approval for safety
+		return true
 	}
 }
 

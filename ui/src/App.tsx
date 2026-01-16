@@ -1,5 +1,6 @@
-import { useState, useCallback, useMemo } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useState, useCallback } from 'react';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import clsx from 'clsx';
 
 import { useWebSocket } from './hooks/useWebSocket';
@@ -10,6 +11,8 @@ import { ProposalQueue } from './components/ProposalQueue';
 import { DecisionModal } from './components/DecisionModal';
 import { MetricsDashboard } from './components/MetricsDashboard';
 import { AuditTrail } from './components/AuditTrail';
+import { SensorControlPage } from './pages/SensorControlPage';
+import { sensorApi } from './api/sensor';
 import type { ConnectionStatus, SystemMetrics } from './types';
 
 // Create a client
@@ -24,6 +27,27 @@ const queryClient = new QueryClient({
 
 // Tab type
 type TabId = 'tracks' | 'proposals' | 'metrics' | 'audit';
+
+// Live/Paused indicator
+function LiveIndicator({ connected, paused }: { connected: boolean; paused: boolean }) {
+  if (!connected) return null;
+
+  if (paused) {
+    return (
+      <div className="flex items-center gap-1 text-xs">
+        <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full" />
+        <span className="text-yellow-400">PAUSED</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 text-xs">
+      <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+      <span className="text-green-400">LIVE</span>
+    </div>
+  );
+}
 
 // Connection status indicator
 function ConnectionIndicator({ status, onReconnect }: { status: ConnectionStatus; onReconnect: () => void }) {
@@ -127,6 +151,17 @@ function DashboardContent() {
   const [activeTab, setActiveTab] = useState<TabId>('tracks');
   const [wsMetrics, setWsMetrics] = useState<SystemMetrics | null>(null);
 
+  // Fetch sensor config for LIVE/PAUSED indicator
+  const { data: sensorConfig } = useQuery({
+    queryKey: ['sensorConfig'],
+    queryFn: async () => {
+      const response = await sensorApi.getConfig();
+      return response.data;
+    },
+    refetchInterval: 5000,
+    staleTime: 3000,
+  });
+
   // Track hooks
   const {
     tracks,
@@ -226,7 +261,6 @@ function DashboardContent() {
             proposals={proposals}
             onApprove={handleApprove}
             onDeny={handleDeny}
-            onViewDetails={openDecisionModal}
             isLoading={proposalsLoading}
           />
         );
@@ -249,26 +283,40 @@ function DashboardContent() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo/Title */}
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-green-600 rounded flex items-center justify-center">
-                <svg
-                  className="w-5 h-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                  />
+            <div className="flex items-center gap-6">
+              <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <div className="w-8 h-8 bg-green-600 rounded flex items-center justify-center">
+                  <svg
+                    className="w-5 h-5 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-gray-100">CJADC2</h1>
+                  <p className="text-xs text-gray-500">Command & Control Dashboard</p>
+                </div>
+              </Link>
+
+              {/* Sensor Control Link */}
+              <Link
+                to="/sensor-control"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-400 hover:text-green-400 hover:bg-gray-800 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-100">CJADC2</h1>
-                <p className="text-xs text-gray-500">Command & Control Dashboard</p>
-              </div>
+                Sensor Control
+              </Link>
             </div>
 
             {/* Status indicators */}
@@ -280,12 +328,7 @@ function DashboardContent() {
               </div>
 
               {/* Real-time indicator */}
-              {status === 'connected' && (
-                <div className="flex items-center gap-1 text-xs">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-green-400">LIVE</span>
-                </div>
-              )}
+              <LiveIndicator connected={status === 'connected'} paused={sensorConfig?.paused ?? false} />
 
               {/* Connection status */}
               <ConnectionIndicator status={status} onReconnect={reconnect} />
@@ -342,11 +385,126 @@ function DashboardContent() {
   );
 }
 
-// Main App with providers
+// Sensor Control page wrapper with shared layout
+function SensorControlWrapper() {
+  const { status, reconnect } = useWebSocket({});
+
+  // Fetch sensor config for LIVE/PAUSED indicator
+  const { data: sensorConfig } = useQuery({
+    queryKey: ['sensorConfig'],
+    queryFn: async () => {
+      const response = await sensorApi.getConfig();
+      return response.data;
+    },
+    refetchInterval: 5000,
+    staleTime: 3000,
+  });
+
+  return (
+    <div className="min-h-screen bg-gray-950">
+      {/* Header */}
+      <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo/Title */}
+            <div className="flex items-center gap-6">
+              <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <div className="w-8 h-8 bg-green-600 rounded flex items-center justify-center">
+                  <svg
+                    className="w-5 h-5 text-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold text-gray-100">CJADC2</h1>
+                  <p className="text-xs text-gray-500">Command & Control Dashboard</p>
+                </div>
+              </Link>
+
+              {/* Sensor Control Link (active) */}
+              <Link
+                to="/sensor-control"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-green-400 bg-gray-800 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Sensor Control
+              </Link>
+            </div>
+
+            {/* Status indicators */}
+            <div className="flex items-center gap-6">
+              {/* Real-time indicator */}
+              <LiveIndicator connected={status === 'connected'} paused={sensorConfig?.paused ?? false} />
+
+              {/* Connection status */}
+              <ConnectionIndicator status={status} onReconnect={reconnect} />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Breadcrumb */}
+      <div className="bg-gray-900/50 border-b border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <nav className="flex items-center gap-2 text-sm">
+            <Link to="/" className="text-gray-400 hover:text-gray-200 transition-colors">
+              Dashboard
+            </Link>
+            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            <span className="text-gray-200">Sensor Control</span>
+          </nav>
+        </div>
+      </div>
+
+      {/* Main content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <SensorControlPage />
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 border-t border-gray-800 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between text-xs text-gray-500">
+            <span>CJADC2 Platform v1.0.0</span>
+            <span>
+              Last updated:{' '}
+              {new Date().toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}
+            </span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+// Main App with providers and routing
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <DashboardContent />
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<DashboardContent />} />
+          <Route path="/sensor-control" element={<SensorControlWrapper />} />
+        </Routes>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 }

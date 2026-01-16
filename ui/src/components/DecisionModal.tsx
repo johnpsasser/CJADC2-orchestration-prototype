@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { formatDistanceToNow, differenceInSeconds } from 'date-fns';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { differenceInSeconds } from 'date-fns';
 import clsx from 'clsx';
 import type { ActionProposal, ThreatLevel } from '../types';
 
@@ -116,6 +116,7 @@ export function DecisionModal({
   const [conditions, setConditions] = useState('');
   const [decision, setDecision] = useState<'approve' | 'deny' | null>(null);
   const [error, setError] = useState('');
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
 
   // Reset form when modal opens with new proposal
   useEffect(() => {
@@ -138,6 +139,16 @@ export function DecisionModal({
       setSelectedReason(DENY_REASONS[0]);
     }
   }, [decision]);
+
+  // Auto-focus submit button when modal opens with a decision selected
+  useEffect(() => {
+    if (isOpen && decision && submitButtonRef.current) {
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        submitButtonRef.current?.focus();
+      });
+    }
+  }, [isOpen, decision]);
 
   // Handle escape key
   useEffect(() => {
@@ -189,6 +200,9 @@ export function DecisionModal({
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="decision-modal-title"
           className={clsx(
             'relative w-full max-w-2xl bg-gray-900 rounded-lg shadow-2xl border',
             colors.border
@@ -198,7 +212,7 @@ export function DecisionModal({
           <div className={clsx('px-6 py-4 border-b border-gray-700', colors.bg)}>
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-100">Decision Required</h2>
+                <h2 id="decision-modal-title" className="text-lg font-semibold text-gray-100">Decision Required</h2>
                 <p className="text-sm text-gray-400">
                   Proposal ID: <span className="font-mono">{proposal.proposal_id}</span>
                 </p>
@@ -208,9 +222,10 @@ export function DecisionModal({
                 <button
                   onClick={onClose}
                   disabled={isSubmitting}
+                  aria-label="Close decision modal"
                   className="text-gray-500 hover:text-gray-300 disabled:opacity-50"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -471,8 +486,16 @@ export function DecisionModal({
               Cancel
             </button>
             <button
+              ref={submitButtonRef}
               onClick={handleSubmit}
               disabled={isSubmitting || !decision}
+              aria-label={
+                decision === 'approve'
+                  ? 'Submit approval decision'
+                  : decision === 'deny'
+                  ? 'Submit denial decision'
+                  : 'Submit decision (select approve or deny first)'
+              }
               className={clsx(
                 'px-6 py-2 font-medium rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
                 decision === 'approve'

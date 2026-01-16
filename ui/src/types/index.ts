@@ -90,7 +90,7 @@ export type ActionType = 'engage' | 'track' | 'identify' | 'ignore' | 'intercept
 
 // ActionProposal represents a proposed action requiring human approval
 export interface ActionProposal {
-  envelope: Envelope;
+  envelope?: Envelope; // Optional - not returned by REST API
   proposal_id: string;
   track_id: string;
   action_type: ActionType;
@@ -101,11 +101,13 @@ export interface ActionProposal {
   threat_level: ThreatLevel;
   expires_at: string;
   policy_decision: PolicyDecision;
+  status?: string; // Added - returned by backend
+  created_at?: string; // Added - returned by backend
 }
 
 // Decision represents a human decision on an action proposal
 export interface Decision {
-  envelope: Envelope;
+  envelope?: Envelope; // Optional - not returned by REST API
   decision_id: string;
   proposal_id: string;
   approved: boolean;
@@ -113,8 +115,8 @@ export interface Decision {
   approved_at: string;
   reason?: string;
   conditions?: string[];
-  action_type: ActionType;
-  track_id: string;
+  action_type?: ActionType; // Optional - may not be in API response
+  track_id?: string; // Optional - may not be in API response
 }
 
 // EffectLog represents the execution of an approved action
@@ -205,10 +207,9 @@ export interface APIResponse<T> {
 }
 
 export interface APIError {
-  error: string;
-  code: string;
+  error: string;        // Error type (e.g., "bad_request", "not_found")
+  message: string;      // Human-readable error message
   correlation_id: string;
-  timestamp: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -223,6 +224,7 @@ export interface PaginatedResponse<T> {
 export interface DecisionRequest {
   proposal_id: string;
   approved: boolean;
+  approved_by: string;
   reason: string;
   conditions?: string[];
 }
@@ -235,3 +237,20 @@ export interface SortConfig {
 
 // Connection status
 export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+
+// Track type weights for sensor configuration
+export interface TrackTypeWeights {
+  aircraft: number;
+  vessel: number;
+  ground: number;
+  missile: number;
+  unknown: number;
+}
+
+// Classification weights for sensor configuration
+export interface ClassificationWeights {
+  friendly: number;
+  hostile: number;
+  neutral: number;
+  unknown: number;
+}

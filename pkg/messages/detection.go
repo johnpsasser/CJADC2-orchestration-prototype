@@ -7,12 +7,13 @@ type Detection struct {
 	Envelope Envelope `json:"envelope"`
 
 	// Detection data
-	TrackID    string   `json:"track_id"`    // External track identifier
-	Position   Position `json:"position"`    // Geographic position
-	Velocity   Velocity `json:"velocity"`    // Speed and heading
-	Confidence float64  `json:"confidence"`  // Detection confidence 0.0-1.0
-	SensorType string   `json:"sensor_type"` // radar, eo, sigint, etc.
-	SensorID   string   `json:"sensor_id"`   // Sensor that made detection
+	TrackID    string   `json:"track_id"`              // External track identifier
+	Type       string   `json:"type,omitempty"`        // Track type hint from sensor: aircraft, vessel, ground, missile, unknown
+	Position   Position `json:"position"`              // Geographic position
+	Velocity   Velocity `json:"velocity"`              // Speed and heading
+	Confidence float64  `json:"confidence"`            // Detection confidence 0.0-1.0
+	SensorType string   `json:"sensor_type"`           // radar, eo, sigint, etc.
+	SensorID   string   `json:"sensor_id"`             // Sensor that made detection
 	RawData    []byte   `json:"raw_data,omitempty"`
 }
 

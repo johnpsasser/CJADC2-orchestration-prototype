@@ -1,14 +1,17 @@
 import { v4 as uuidv4 } from 'uuid';
+import type { TrackTypeWeights, ClassificationWeights } from '../types';
 
 // Sensor configuration types
 export interface SensorConfig {
   emission_interval_ms: number;
   track_count: number;
   paused: boolean;
+  type_weights?: TrackTypeWeights;
+  classification_weights?: ClassificationWeights;
 }
 
-// Sensor API base URL (sensor-sim runs on port 9090)
-const SENSOR_API_BASE_URL = import.meta.env.VITE_SENSOR_API_URL || 'http://localhost:9090';
+// Sensor API base URL (sensor-sim is exposed on port 9091)
+const SENSOR_API_BASE_URL = import.meta.env.VITE_SENSOR_API_URL || 'http://localhost:9091';
 
 // Generate a correlation ID for request tracing
 function generateCorrelationId(): string {

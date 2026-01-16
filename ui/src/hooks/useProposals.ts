@@ -195,10 +195,11 @@ export function useProposals() {
 
   // Submit approval
   const approve = useCallback(
-    (proposalId: string, reason: string, conditions?: string[]) => {
+    (proposalId: string, reason: string, conditions?: string[], approvedBy: string = 'operator') => {
       return decisionMutation.mutateAsync({
         proposal_id: proposalId,
         approved: true,
+        approved_by: approvedBy,
         reason,
         conditions,
       });
@@ -208,10 +209,11 @@ export function useProposals() {
 
   // Submit denial
   const deny = useCallback(
-    (proposalId: string, reason: string) => {
+    (proposalId: string, reason: string, approvedBy: string = 'operator') => {
       return decisionMutation.mutateAsync({
         proposal_id: proposalId,
         approved: false,
+        approved_by: approvedBy,
         reason,
       });
     },
@@ -239,7 +241,7 @@ export function useProposals() {
   return {
     // Data
     proposals: sortedProposals,
-    proposalCount: proposals.size,
+    proposalCount: sortedProposals.length,
     selectedProposal,
     selectedProposalId,
     expiringSoonProposals,

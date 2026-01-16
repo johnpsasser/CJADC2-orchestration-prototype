@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/agile-defense/cjadc2/pkg/messages"
@@ -971,18 +972,19 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 	}
 	stages = append(stages, planner)
 
-	// Authorizer stage - decisions made with latency from proposal to decision
+	// Authorizer stage - count proposals received (pending + decided) as processed
+	// succeeded = approved decisions, failed = denied + expired
 	var authProcessed, authSucceeded, authFailed int64
 	var authLastUpdated time.Time
 	var authP50, authP95, authP99 float64
 	err = p.QueryRow(ctx, `
 		SELECT
 			COUNT(*) as processed,
-			COALESCE(SUM(CASE WHEN approved THEN 1 ELSE 0 END), 0) as succeeded,
-			COALESCE(SUM(CASE WHEN NOT approved THEN 1 ELSE 0 END), 0) as failed,
-			COALESCE(MAX(approved_at), NOW()) as last_updated
-		FROM decisions
-		WHERE approved_at >= NOW() - INTERVAL '5 minutes'
+			COALESCE(SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END), 0) as succeeded,
+			COALESCE(SUM(CASE WHEN status IN ('denied', 'expired') THEN 1 ELSE 0 END), 0) as failed,
+			COALESCE(MAX(created_at), NOW()) as last_updated
+		FROM proposals
+		WHERE created_at >= NOW() - INTERVAL '5 minutes'
 	`).Scan(&authProcessed, &authSucceeded, &authFailed, &authLastUpdated)
 	if err != nil {
 		authProcessed, authSucceeded, authFailed = 0, 0, 0
@@ -1143,14 +1145,13 @@ func (p *Pool) ListAuditEntries(ctx context.Context, filter AuditFilter) ([]Audi
 			p.proposal_id,
 			p.action_type,
 			p.rationale,
-			t.external_track_id,
-			t.threat_level,
+			p.track_id as external_track_id,
+			p.threat_level,
 			e.effect_id,
 			e.status as effect_status,
 			e.executed_at
 		FROM decisions d
 		JOIN proposals p ON d.proposal_id = p.proposal_id
-		JOIN tracks t ON p.track_id = t.track_id
 		LEFT JOIN effects e ON d.decision_id = e.decision_id
 		WHERE 1=1
 	`
@@ -1170,7 +1171,7 @@ func (p *Pool) ListAuditEntries(ctx context.Context, filter AuditFilter) ([]Audi
 	}
 
 	if filter.TrackID != "" {
-		query += fmt.Sprintf(" AND t.external_track_id = $%d", argNum)
+		query += fmt.Sprintf(" AND p.track_id = $%d", argNum)
 		args = append(args, filter.TrackID)
 		argNum++
 	}
@@ -1204,9 +1205,9 @@ func (p *Pool) ListAuditEntries(ctx context.Context, filter AuditFilter) ([]Audi
 			reason        *string
 			proposalID    string
 			actionType    string
-			rationale     string
+			rationale     *string
 			trackID       string
-			threatLevel   string
+			threatLevel   *string
 			effectID      *string
 			effectStatus  *string
 			executedAt    *time.Time
@@ -1240,7 +1241,10 @@ func (p *Pool) ListAuditEntries(ctx context.Context, filter AuditFilter) ([]Audi
 		}
 
 		// Build details string
-		details := rationale
+		details := ""
+		if rationale != nil {
+			details = *rationale
+		}
 		if reason != nil && *reason != "" {
 			details = *reason
 		}
@@ -1289,6 +1293,68 @@ func (p *Pool) CountPendingProposals(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("failed to count pending proposals: %w", err)
 	}
 	return count, nil
+}
+
+// ClearAllResult contains the counts of deleted records per table
+type ClearAllResult struct {
+	Effects    int64
+	Decisions  int64
+	Proposals  int64
+	Detections int64
+	Tracks     int64
+}
+
+// ClearAll deletes all data from the database tables in the correct order
+// to respect foreign key constraints. Uses a transaction for atomicity.
+// Returns the counts of deleted records per table.
+func (p *Pool) ClearAll(ctx context.Context) (*ClearAllResult, error) {
+	tx, err := p.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	result := &ClearAllResult{}
+
+	// Delete in order respecting foreign key constraints:
+	// effects -> decisions -> proposals -> detections -> tracks
+	var tag pgconn.CommandTag
+
+	tag, err = tx.Exec(ctx, "DELETE FROM effects")
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete from effects: %w", err)
+	}
+	result.Effects = tag.RowsAffected()
+
+	tag, err = tx.Exec(ctx, "DELETE FROM decisions")
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete from decisions: %w", err)
+	}
+	result.Decisions = tag.RowsAffected()
+
+	tag, err = tx.Exec(ctx, "DELETE FROM proposals")
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete from proposals: %w", err)
+	}
+	result.Proposals = tag.RowsAffected()
+
+	tag, err = tx.Exec(ctx, "DELETE FROM detections")
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete from detections: %w", err)
+	}
+	result.Detections = tag.RowsAffected()
+
+	tag, err = tx.Exec(ctx, "DELETE FROM tracks")
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete from tracks: %w", err)
+	}
+	result.Tracks = tag.RowsAffected()
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return result, nil
 }
 
 // Health checks if the database connection is healthy

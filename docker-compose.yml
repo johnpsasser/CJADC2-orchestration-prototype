@@ -97,6 +97,8 @@ services:
       dockerfile: build/Dockerfile.agent
       args:
         AGENT_TYPE: sensor
+    ports:
+      - "9091:9090"  # Sensor control API
     environment:
       AGENT_ID: sensor-001
       AGENT_TYPE: sensor

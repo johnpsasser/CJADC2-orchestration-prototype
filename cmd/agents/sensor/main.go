@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"sync"
 	"syscall"
@@ -37,22 +38,60 @@ const (
 	DefaultTrackCount       = 10
 )
 
+// Default type weights (must sum to 100 for percentage-based selection)
+var DefaultTypeWeights = map[string]int{
+	"aircraft": 40,
+	"vessel":   20,
+	"ground":   15,
+	"missile":  5,
+	"unknown":  20,
+}
+
+// Default classification weights (must sum to 100 for percentage-based selection)
+var DefaultClassificationWeights = map[string]int{
+	"friendly": 30,
+	"hostile":  25,
+	"neutral":  20,
+	"unknown":  25,
+}
+
+// Missile-specific classification weights (90% hostile, 10% unknown)
+var MissileClassificationWeights = map[string]int{
+	"friendly": 0,
+	"hostile":  90,
+	"neutral":  0,
+	"unknown":  10,
+}
+
 // SensorConfig holds the runtime configuration for the sensor agent
 type SensorConfig struct {
 	mu sync.RWMutex
 
-	emissionInterval time.Duration
-	trackCount       int
-	paused           bool
+	emissionInterval      time.Duration
+	trackCount            int
+	paused                bool
+	typeWeights           map[string]int
+	classificationWeights map[string]int
 }
 
 // NewSensorConfig creates a new SensorConfig with default values
 func NewSensorConfig() *SensorConfig {
 	return &SensorConfig{
-		emissionInterval: DefaultEmissionInterval,
-		trackCount:       DefaultTrackCount,
-		paused:           false,
+		emissionInterval:      DefaultEmissionInterval,
+		trackCount:            DefaultTrackCount,
+		paused:                false,
+		typeWeights:           copyWeights(DefaultTypeWeights),
+		classificationWeights: copyWeights(DefaultClassificationWeights),
 	}
+}
+
+// copyWeights creates a copy of a weights map
+func copyWeights(src map[string]int) map[string]int {
+	dst := make(map[string]int, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }
 
 // GetEmissionInterval returns the current emission interval
@@ -105,6 +144,80 @@ func (c *SensorConfig) SetPaused(paused bool) {
 	c.paused = paused
 }
 
+// GetTypeWeights returns a copy of the current type weights
+func (c *SensorConfig) GetTypeWeights() map[string]int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return copyWeights(c.typeWeights)
+}
+
+// SetTypeWeights sets the type weights with validation
+func (c *SensorConfig) SetTypeWeights(weights map[string]int) error {
+	// Validate keys are valid track types
+	validTypes := map[string]bool{"aircraft": true, "vessel": true, "ground": true, "missile": true, "unknown": true}
+	for key := range weights {
+		if !validTypes[key] {
+			return fmt.Errorf("invalid track type: %s (valid types: aircraft, vessel, ground, missile, unknown)", key)
+		}
+	}
+	// Validate weights are non-negative
+	for key, weight := range weights {
+		if weight < 0 {
+			return fmt.Errorf("weight for %s cannot be negative", key)
+		}
+	}
+	// Validate at least one weight is positive
+	total := 0
+	for _, weight := range weights {
+		total += weight
+	}
+	if total == 0 {
+		return fmt.Errorf("at least one type weight must be positive")
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.typeWeights = copyWeights(weights)
+	return nil
+}
+
+// GetClassificationWeights returns a copy of the current classification weights
+func (c *SensorConfig) GetClassificationWeights() map[string]int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return copyWeights(c.classificationWeights)
+}
+
+// SetClassificationWeights sets the classification weights with validation
+func (c *SensorConfig) SetClassificationWeights(weights map[string]int) error {
+	// Validate keys are valid classifications
+	validClassifications := map[string]bool{"friendly": true, "hostile": true, "neutral": true, "unknown": true}
+	for key := range weights {
+		if !validClassifications[key] {
+			return fmt.Errorf("invalid classification: %s (valid: friendly, hostile, neutral, unknown)", key)
+		}
+	}
+	// Validate weights are non-negative
+	for key, weight := range weights {
+		if weight < 0 {
+			return fmt.Errorf("weight for %s cannot be negative", key)
+		}
+	}
+	// Validate at least one weight is positive
+	total := 0
+	for _, weight := range weights {
+		total += weight
+	}
+	if total == 0 {
+		return fmt.Errorf("at least one classification weight must be positive")
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.classificationWeights = copyWeights(weights)
+	return nil
+}
+
 // Reset resets configuration to default values
 func (c *SensorConfig) Reset() {
 	c.mu.Lock()
@@ -112,6 +225,8 @@ func (c *SensorConfig) Reset() {
 	c.emissionInterval = DefaultEmissionInterval
 	c.trackCount = DefaultTrackCount
 	c.paused = false
+	c.typeWeights = copyWeights(DefaultTypeWeights)
+	c.classificationWeights = copyWeights(DefaultClassificationWeights)
 }
 
 // Snapshot returns a copy of the current configuration
@@ -121,18 +236,29 @@ func (c *SensorConfig) Snapshot() (emissionInterval time.Duration, trackCount in
 	return c.emissionInterval, c.trackCount, c.paused
 }
 
+// FullSnapshot returns a complete copy of the current configuration including weights
+func (c *SensorConfig) FullSnapshot() (emissionInterval time.Duration, trackCount int, paused bool, typeWeights, classificationWeights map[string]int) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.emissionInterval, c.trackCount, c.paused, copyWeights(c.typeWeights), copyWeights(c.classificationWeights)
+}
+
 // ConfigResponse represents the JSON response for configuration
 type ConfigResponse struct {
-	EmissionIntervalMS int64 `json:"emission_interval_ms"`
-	TrackCount         int   `json:"track_count"`
-	Paused             bool  `json:"paused"`
+	EmissionIntervalMS    int64          `json:"emission_interval_ms"`
+	TrackCount            int            `json:"track_count"`
+	Paused                bool           `json:"paused"`
+	TypeWeights           map[string]int `json:"type_weights"`
+	ClassificationWeights map[string]int `json:"classification_weights"`
 }
 
 // ConfigUpdateRequest represents a partial configuration update request
 type ConfigUpdateRequest struct {
-	EmissionIntervalMS *int64 `json:"emission_interval_ms,omitempty"`
-	TrackCount         *int   `json:"track_count,omitempty"`
-	Paused             *bool  `json:"paused,omitempty"`
+	EmissionIntervalMS    *int64          `json:"emission_interval_ms,omitempty"`
+	TrackCount            *int            `json:"track_count,omitempty"`
+	Paused                *bool           `json:"paused,omitempty"`
+	TypeWeights           *map[string]int `json:"type_weights,omitempty"`
+	ClassificationWeights *map[string]int `json:"classification_weights,omitempty"`
 }
 
 // SensorAgent generates synthetic detection events
@@ -285,12 +411,14 @@ func (s *SensorAgent) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // handleGetConfig handles GET /api/v1/config
 func (s *SensorAgent) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	interval, trackCount, paused := s.config.Snapshot()
+	interval, trackCount, paused, typeWeights, classificationWeights := s.config.FullSnapshot()
 
 	response := ConfigResponse{
-		EmissionIntervalMS: interval.Milliseconds(),
-		TrackCount:         trackCount,
-		Paused:             paused,
+		EmissionIntervalMS:    interval.Milliseconds(),
+		TrackCount:            trackCount,
+		Paused:                paused,
+		TypeWeights:           typeWeights,
+		ClassificationWeights: classificationWeights,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -333,6 +461,22 @@ func (s *SensorAgent) handlePatchConfig(w http.ResponseWriter, r *http.Request) 
 	if req.Paused != nil {
 		s.config.SetPaused(*req.Paused)
 		s.Logger().Info().Bool("paused", *req.Paused).Msg("Updated paused state")
+	}
+
+	if req.TypeWeights != nil {
+		if err := s.config.SetTypeWeights(*req.TypeWeights); err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.Logger().Info().Interface("type_weights", *req.TypeWeights).Msg("Updated type weights")
+	}
+
+	if req.ClassificationWeights != nil {
+		if err := s.config.SetClassificationWeights(*req.ClassificationWeights); err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.Logger().Info().Interface("classification_weights", *req.ClassificationWeights).Msg("Updated classification weights")
 	}
 
 	// Adjust tracks if count changed
@@ -398,40 +542,97 @@ func (s *SensorAgent) initializeTracks(count int) {
 	s.initializeTracksLocked(count)
 }
 
+// weightedRandomSelect selects a key from a weights map using weighted random selection
+func weightedRandomSelect(weights map[string]int) string {
+	// Get sorted keys for deterministic iteration order
+	keys := make([]string, 0, len(weights))
+	for key := range weights {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	// Calculate total weight
+	total := 0
+	for _, weight := range weights {
+		total += weight
+	}
+	if total == 0 {
+		// Fallback: return first key
+		if len(keys) > 0 {
+			return keys[0]
+		}
+		return ""
+	}
+
+	// Generate random number in range [0, total)
+	r := rand.Intn(total)
+
+	// Select based on cumulative weights using sorted keys
+	cumulative := 0
+	for _, key := range keys {
+		cumulative += weights[key]
+		if r < cumulative {
+			return key
+		}
+	}
+
+	// Fallback (shouldn't reach here)
+	if len(keys) > 0 {
+		return keys[0]
+	}
+	return ""
+}
+
+// getClassificationPrefix returns the track ID prefix for a classification
+func getClassificationPrefix(classification string) string {
+	switch classification {
+	case "friendly":
+		return "F"
+	case "hostile":
+		return "H"
+	case "neutral":
+		return "N"
+	default:
+		return "U"
+	}
+}
+
 // initializeTracksLocked creates initial simulated tracks (must hold tracksMu)
 func (s *SensorAgent) initializeTracksLocked(count int) {
-	trackTypes := []string{"aircraft", "vessel", "ground", "unknown"}
-
 	for i := 0; i < count; i++ {
-		s.addSingleTrackLocked(i, trackTypes)
+		s.addSingleTrackLocked(i)
 	}
 }
 
 // addTracksLocked adds new tracks (must hold tracksMu)
 func (s *SensorAgent) addTracksLocked(count int) {
-	trackTypes := []string{"aircraft", "vessel", "ground", "unknown"}
 	startIndex := len(s.tracks)
 
 	for i := 0; i < count; i++ {
-		s.addSingleTrackLocked(startIndex+i, trackTypes)
+		s.addSingleTrackLocked(startIndex + i)
 	}
 }
 
 // addSingleTrackLocked adds a single track (must hold tracksMu)
-func (s *SensorAgent) addSingleTrackLocked(index int, trackTypes []string) {
-	// Distribute prefixes: 30% friendly, 20% hostile, 20% neutral, 30% unknown
-	var prefix string
-	r := rand.Float64()
-	switch {
-	case r < 0.3:
-		prefix = "F"
-	case r < 0.5:
-		prefix = "H"
-	case r < 0.7:
-		prefix = "N"
-	default:
-		prefix = "U"
+func (s *SensorAgent) addSingleTrackLocked(index int) {
+	// Get current configuration weights
+	typeWeights := s.config.GetTypeWeights()
+	classificationWeights := s.config.GetClassificationWeights()
+
+	// Select track type using weighted random
+	trackType := weightedRandomSelect(typeWeights)
+
+	// Select classification using weighted random
+	// For missiles, use special missile classification weights (90% hostile, 10% unknown)
+	var classification string
+	if trackType == "missile" {
+		classification = weightedRandomSelect(MissileClassificationWeights)
+	} else {
+		classification = weightedRandomSelect(classificationWeights)
 	}
+
+	// Get track ID prefix based on classification
+	prefix := getClassificationPrefix(classification)
 	id := fmt.Sprintf("%s-TRK-%04d", prefix, index+1)
 
 	// Ensure unique ID
@@ -443,22 +644,24 @@ func (s *SensorAgent) addSingleTrackLocked(index int, trackTypes []string) {
 		id = fmt.Sprintf("%s-TRK-%04d", prefix, index+1)
 	}
 
-	// Generate altitude based on track type for more realistic classification
-	trackType := trackTypes[rand.Intn(len(trackTypes))]
+	// Generate altitude and speed based on track type for more realistic simulation
 	var alt, speed float64
 	switch trackType {
 	case "aircraft":
 		alt = 5000 + rand.Float64()*10000 // 5000-15000m for aircraft
 		speed = 150 + rand.Float64()*300  // 150-450 m/s
 	case "vessel":
-		alt = 0                        // Sea level
-		speed = 5 + rand.Float64()*30  // 5-35 m/s (10-70 knots)
+		alt = 0                       // Sea level
+		speed = 5 + rand.Float64()*30 // 5-35 m/s (10-70 knots)
 	case "ground":
-		alt = rand.Float64() * 100    // 0-100m
-		speed = rand.Float64() * 40   // 0-40 m/s
-	default:
-		alt = rand.Float64() * 12000      // Random altitude
-		speed = 100 + rand.Float64()*400  // 100-500 m/s
+		alt = rand.Float64() * 100  // 0-100m
+		speed = rand.Float64() * 40 // 0-40 m/s
+	case "missile":
+		alt = 1000 + rand.Float64()*15000 // 1000-16000m for missiles
+		speed = 300 + rand.Float64()*700  // 300-1000 m/s (Mach 1-3)
+	default: // unknown
+		alt = rand.Float64() * 12000     // Random altitude
+		speed = 100 + rand.Float64()*400 // 100-500 m/s
 	}
 
 	s.tracks[id] = &simulatedTrack{
@@ -556,6 +759,7 @@ func (s *SensorAgent) emitDetections(ctx context.Context) {
 		detection := &messages.Detection{
 			Envelope:   messages.NewEnvelope(s.ID(), "sensor"),
 			TrackID:    track.id,
+			Type:       track.trackType, // Pass track type hint to classifier
 			Position:   track.position,
 			Velocity:   track.velocity,
 			Confidence: confidence,
@@ -609,10 +813,17 @@ func (s *SensorAgent) updateTrackPosition(track *simulatedTrack, interval time.D
 		track.velocity.Speed = math.Max(50, math.Min(600, track.velocity.Speed))
 	}
 
-	// Occasionally change altitude (for aircraft)
-	if track.trackType == "aircraft" && rand.Float64() < 0.05 {
-		track.position.Alt += (rand.Float64() - 0.5) * 500
-		track.position.Alt = math.Max(0, math.Min(15000, track.position.Alt))
+	// Occasionally change altitude (for aircraft and missiles)
+	if rand.Float64() < 0.05 {
+		switch track.trackType {
+		case "aircraft":
+			track.position.Alt += (rand.Float64() - 0.5) * 500
+			track.position.Alt = math.Max(0, math.Min(15000, track.position.Alt))
+		case "missile":
+			// Missiles have more dramatic altitude changes
+			track.position.Alt += (rand.Float64() - 0.5) * 1000
+			track.position.Alt = math.Max(100, math.Min(20000, track.position.Alt))
+		}
 	}
 }
 

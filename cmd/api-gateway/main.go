@@ -338,6 +338,9 @@ func setupRouter(cfg Config, db *postgres.Pool, nc *nats.Conn, opaClient *opa.Cl
 		// Audit handlers
 		auditHandler := handler.NewAuditHandler(db, log.Logger)
 		r.Mount("/audit", auditHandler.Routes())
+
+		// Clear all data endpoint
+		r.Post("/clear", clearHandler(db))
 	})
 
 	return r
@@ -458,6 +461,72 @@ func healthHandler(db *postgres.Pool, nc *nats.Conn, opaClient *opa.Client) http
 		}
 
 		handler.WriteJSON(w, status, response)
+	}
+}
+
+// ClearDeletedCounts represents the counts of deleted records per table
+type ClearDeletedCounts struct {
+	Tracks     int64 `json:"tracks"`
+	Proposals  int64 `json:"proposals"`
+	Decisions  int64 `json:"decisions"`
+	Effects    int64 `json:"effects"`
+	Detections int64 `json:"detections"`
+}
+
+// ClearResponse represents the response for the clear endpoint
+type ClearResponse struct {
+	Success       bool               `json:"success"`
+	Message       string             `json:"message"`
+	Deleted       ClearDeletedCounts `json:"deleted"`
+	CorrelationID string             `json:"correlation_id"`
+}
+
+// clearHandler handles POST /api/v1/clear to delete all data from the database
+func clearHandler(db *postgres.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		correlationID := handler.GetCorrelationID(ctx)
+
+		log.Info().
+			Str("correlation_id", correlationID).
+			Msg("Clearing all data from database")
+
+		result, err := db.ClearAll(ctx)
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("correlation_id", correlationID).
+				Msg("Failed to clear database")
+
+			handler.WriteJSON(w, http.StatusInternalServerError, ClearResponse{
+				Success:       false,
+				Message:       "Failed to clear data: " + err.Error(),
+				CorrelationID: correlationID,
+			})
+			return
+		}
+
+		log.Info().
+			Str("correlation_id", correlationID).
+			Int64("tracks", result.Tracks).
+			Int64("proposals", result.Proposals).
+			Int64("decisions", result.Decisions).
+			Int64("effects", result.Effects).
+			Int64("detections", result.Detections).
+			Msg("Successfully cleared all data from database")
+
+		handler.WriteJSON(w, http.StatusOK, ClearResponse{
+			Success: true,
+			Message: "All data cleared successfully",
+			Deleted: ClearDeletedCounts{
+				Tracks:     result.Tracks,
+				Proposals:  result.Proposals,
+				Decisions:  result.Decisions,
+				Effects:    result.Effects,
+				Detections: result.Detections,
+			},
+			CorrelationID: correlationID,
+		})
 	}
 }
 

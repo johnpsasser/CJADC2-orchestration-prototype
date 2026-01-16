@@ -184,7 +184,12 @@ func (a *ClassifierAgent) classify(track *messages.Track, detection *messages.De
 
 // determineTrackType infers the type of track from detection characteristics
 func (a *ClassifierAgent) determineTrackType(detection *messages.Detection) string {
-	// Use velocity and altitude to help determine type
+	// If the sensor provided a track type hint, use it (trusted sensor data)
+	if detection.Type != "" {
+		return detection.Type
+	}
+
+	// Fallback to heuristics if no type provided
 	speed := detection.Velocity.Speed
 	alt := detection.Position.Alt
 

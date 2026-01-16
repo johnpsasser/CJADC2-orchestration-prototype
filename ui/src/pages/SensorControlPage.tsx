@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { sensorApi, SensorConfig, SensorAPIError } from '../api/sensor';
+import { clearApi, APIClientError } from '../api/client';
+import type { TrackTypeWeights, ClassificationWeights } from '../types';
 
 // Toast notification component
 interface ToastProps {
@@ -175,6 +177,120 @@ function NumberInput({ label, value, min, max, disabled, onChange }: NumberInput
   );
 }
 
+// Collapsible section component
+interface CollapsibleSectionProps {
+  title: string;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}
+
+function CollapsibleSection({ title, isOpen, onToggle, children }: CollapsibleSectionProps) {
+  return (
+    <div className="border border-gray-700 rounded-lg overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full px-4 py-3 flex items-center justify-between bg-gray-900 hover:bg-gray-800 transition-colors"
+      >
+        <span className="text-sm font-medium text-gray-300">{title}</span>
+        <svg
+          className={clsx(
+            'w-5 h-5 text-gray-400 transition-transform duration-200',
+            isOpen && 'rotate-180'
+          )}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div
+        className={clsx(
+          'transition-all duration-200 overflow-hidden',
+          isOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+        )}
+      >
+        <div className="p-4 bg-gray-800/50">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Weight slider with inline numeric input
+interface WeightSliderProps {
+  label: string;
+  value: number;
+  disabled?: boolean;
+  color: string;
+  onChange: (value: number) => void;
+}
+
+function WeightSlider({ label, value, disabled, color, onChange }: WeightSliderProps) {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="w-24 flex-shrink-0">
+        <span className="text-sm text-gray-300 capitalize">{label}</span>
+      </div>
+      <div className="flex-1">
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className={clsx(
+            'w-full h-2 rounded-lg appearance-none cursor-pointer bg-gray-700',
+            color,
+            disabled && 'opacity-50 cursor-not-allowed'
+          )}
+        />
+      </div>
+      <div className="w-20 flex-shrink-0">
+        <input
+          type="number"
+          min={0}
+          max={100}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => {
+            const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+            onChange(val);
+          }}
+          className={clsx(
+            'w-full px-2 py-1 rounded bg-gray-700 border border-gray-600',
+            'text-gray-200 font-mono text-sm text-right',
+            'focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-transparent',
+            disabled && 'opacity-50 cursor-not-allowed'
+          )}
+        />
+      </div>
+      <span className="text-xs text-gray-500 w-4">%</span>
+    </div>
+  );
+}
+
+// Default weight values
+const DEFAULT_TYPE_WEIGHTS: TrackTypeWeights = {
+  aircraft: 40,
+  vessel: 20,
+  ground: 15,
+  missile: 5,
+  unknown: 20,
+};
+
+const DEFAULT_CLASSIFICATION_WEIGHTS: ClassificationWeights = {
+  friendly: 30,
+  hostile: 25,
+  neutral: 20,
+  unknown: 25,
+};
+
 // Main SensorControlPage component
 export function SensorControlPage() {
   const queryClient = useQueryClient();
@@ -183,6 +299,10 @@ export function SensorControlPage() {
   // Local state for form values (optimistic UI)
   const [localConfig, setLocalConfig] = useState<SensorConfig | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Collapsible section state
+  const [typeWeightsOpen, setTypeWeightsOpen] = useState(false);
+  const [classificationWeightsOpen, setClassificationWeightsOpen] = useState(false);
 
   // Fetch current configuration
   const { data: configData, isLoading, error, refetch } = useQuery({
@@ -258,6 +378,30 @@ export function SensorControlPage() {
     },
   });
 
+  // Clear all data mutation
+  const clearAllMutation = useMutation({
+    mutationFn: async () => {
+      const response = await clearApi.clearAll();
+      return response.data;
+    },
+    onSuccess: (data) => {
+      // Invalidate relevant queries to refresh the UI
+      queryClient.invalidateQueries({ queryKey: ['tracks'] });
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      queryClient.invalidateQueries({ queryKey: ['decisions'] });
+      queryClient.invalidateQueries({ queryKey: ['effects'] });
+      const totalDeleted = data.deleted.tracks + data.deleted.proposals + data.deleted.decisions + data.deleted.effects + data.deleted.detections;
+      setToast({
+        message: `Cleared ${totalDeleted} records`,
+        type: 'success'
+      });
+    },
+    onError: (error) => {
+      const message = error instanceof APIClientError ? error.message : 'Failed to clear data';
+      setToast({ message, type: 'error' });
+    },
+  });
+
   // Handlers
   const handleEmissionIntervalChange = useCallback((value: number) => {
     if (localConfig) {
@@ -273,11 +417,35 @@ export function SensorControlPage() {
     }
   }, [localConfig]);
 
+  const handleTypeWeightChange = useCallback((key: keyof TrackTypeWeights, value: number) => {
+    if (localConfig) {
+      const currentWeights = localConfig.type_weights || DEFAULT_TYPE_WEIGHTS;
+      setLocalConfig({
+        ...localConfig,
+        type_weights: { ...currentWeights, [key]: value },
+      });
+      setHasChanges(true);
+    }
+  }, [localConfig]);
+
+  const handleClassificationWeightChange = useCallback((key: keyof ClassificationWeights, value: number) => {
+    if (localConfig) {
+      const currentWeights = localConfig.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS;
+      setLocalConfig({
+        ...localConfig,
+        classification_weights: { ...currentWeights, [key]: value },
+      });
+      setHasChanges(true);
+    }
+  }, [localConfig]);
+
   const handleApplyChanges = useCallback(() => {
     if (localConfig && hasChanges) {
       updateMutation.mutate({
         emission_interval_ms: localConfig.emission_interval_ms,
         track_count: localConfig.track_count,
+        type_weights: localConfig.type_weights,
+        classification_weights: localConfig.classification_weights,
       });
     }
   }, [localConfig, hasChanges, updateMutation]);
@@ -298,6 +466,18 @@ export function SensorControlPage() {
       setHasChanges(false);
     }
   }, [configData]);
+
+  const handleClearAll = useCallback(() => {
+    if (!localConfig?.paused) {
+      return; // Should not be callable when sensors are running
+    }
+    const confirmed = window.confirm(
+      'Are you sure you want to clear all data? This will permanently delete all tracks, proposals, decisions, and effects.'
+    );
+    if (confirmed) {
+      clearAllMutation.mutate();
+    }
+  }, [localConfig, clearAllMutation]);
 
   // Format emission interval for display
   const formatInterval = (ms: number): string => {
@@ -359,7 +539,8 @@ export function SensorControlPage() {
   const config = localConfig || configData;
   if (!config) return null;
 
-  const isMutating = updateMutation.isPending || resetMutation.isPending || togglePauseMutation.isPending;
+  const isMutating = updateMutation.isPending || resetMutation.isPending || togglePauseMutation.isPending || clearAllMutation.isPending;
+  const canClear = config.paused && !isMutating;
 
   return (
     <div className="space-y-6">
@@ -367,12 +548,44 @@ export function SensorControlPage() {
       <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-100">Sensor Control Panel</h2>
+            <h2 className="text-xl font-bold text-gray-100">Sensor Simulator Control Panel</h2>
             <p className="text-sm text-gray-400 mt-1">
               Configure the synthetic sensor simulation parameters
             </p>
           </div>
           <StatusIndicator paused={config.paused} isLoading={isMutating} />
+        </div>
+      </div>
+
+      {/* Current Values Card */}
+      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wide mb-4">
+          Current Values
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Emission Interval</p>
+            <p className="mt-1 text-2xl font-bold text-green-400 font-mono">
+              {formatInterval(config.emission_interval_ms)}
+              <span className="text-sm text-gray-500 ml-1">{getIntervalUnit(config.emission_interval_ms)}</span>
+            </p>
+          </div>
+          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Track Count</p>
+            <p className="mt-1 text-2xl font-bold text-blue-400 font-mono">
+              {config.track_count}
+              <span className="text-sm text-gray-500 ml-1">tracks</span>
+            </p>
+          </div>
+          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Status</p>
+            <p className={clsx(
+              'mt-1 text-2xl font-bold font-mono',
+              config.paused ? 'text-yellow-400' : 'text-green-400'
+            )}>
+              {config.paused ? 'PAUSED' : 'ACTIVE'}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -405,6 +618,115 @@ export function SensorControlPage() {
             disabled={isMutating}
             onChange={handleTrackCountChange}
           />
+
+          {/* Track Type Distribution */}
+          <CollapsibleSection
+            title="Track Type Distribution"
+            isOpen={typeWeightsOpen}
+            onToggle={() => setTypeWeightsOpen(!typeWeightsOpen)}
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-500">Adjust weights to control track type distribution</span>
+                <span className={clsx(
+                  'text-xs font-mono',
+                  (() => {
+                    const weights = config.type_weights || DEFAULT_TYPE_WEIGHTS;
+                    const sum = Object.values(weights).reduce((a, b) => a + b, 0);
+                    return sum === 100 ? 'text-green-400' : 'text-yellow-400';
+                  })()
+                )}>
+                  Total: {Object.values(config.type_weights || DEFAULT_TYPE_WEIGHTS).reduce((a, b) => a + b, 0)}%
+                </span>
+              </div>
+              <WeightSlider
+                label="Aircraft"
+                value={(config.type_weights || DEFAULT_TYPE_WEIGHTS).aircraft}
+                disabled={isMutating}
+                color="accent-blue-500"
+                onChange={(v) => handleTypeWeightChange('aircraft', v)}
+              />
+              <WeightSlider
+                label="Vessel"
+                value={(config.type_weights || DEFAULT_TYPE_WEIGHTS).vessel}
+                disabled={isMutating}
+                color="accent-cyan-500"
+                onChange={(v) => handleTypeWeightChange('vessel', v)}
+              />
+              <WeightSlider
+                label="Ground"
+                value={(config.type_weights || DEFAULT_TYPE_WEIGHTS).ground}
+                disabled={isMutating}
+                color="accent-amber-500"
+                onChange={(v) => handleTypeWeightChange('ground', v)}
+              />
+              <WeightSlider
+                label="Missile"
+                value={(config.type_weights || DEFAULT_TYPE_WEIGHTS).missile}
+                disabled={isMutating}
+                color="accent-red-500"
+                onChange={(v) => handleTypeWeightChange('missile', v)}
+              />
+              <WeightSlider
+                label="Unknown"
+                value={(config.type_weights || DEFAULT_TYPE_WEIGHTS).unknown}
+                disabled={isMutating}
+                color="accent-gray-500"
+                onChange={(v) => handleTypeWeightChange('unknown', v)}
+              />
+            </div>
+          </CollapsibleSection>
+
+          {/* Classification Distribution */}
+          <CollapsibleSection
+            title="Classification Distribution"
+            isOpen={classificationWeightsOpen}
+            onToggle={() => setClassificationWeightsOpen(!classificationWeightsOpen)}
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-500">Adjust weights to control classification distribution</span>
+                <span className={clsx(
+                  'text-xs font-mono',
+                  (() => {
+                    const weights = config.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS;
+                    const sum = Object.values(weights).reduce((a, b) => a + b, 0);
+                    return sum === 100 ? 'text-green-400' : 'text-yellow-400';
+                  })()
+                )}>
+                  Total: {Object.values(config.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS).reduce((a, b) => a + b, 0)}%
+                </span>
+              </div>
+              <WeightSlider
+                label="Friendly"
+                value={(config.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS).friendly}
+                disabled={isMutating}
+                color="accent-green-500"
+                onChange={(v) => handleClassificationWeightChange('friendly', v)}
+              />
+              <WeightSlider
+                label="Hostile"
+                value={(config.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS).hostile}
+                disabled={isMutating}
+                color="accent-red-500"
+                onChange={(v) => handleClassificationWeightChange('hostile', v)}
+              />
+              <WeightSlider
+                label="Neutral"
+                value={(config.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS).neutral}
+                disabled={isMutating}
+                color="accent-blue-500"
+                onChange={(v) => handleClassificationWeightChange('neutral', v)}
+              />
+              <WeightSlider
+                label="Unknown"
+                value={(config.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS).unknown}
+                disabled={isMutating}
+                color="accent-gray-500"
+                onChange={(v) => handleClassificationWeightChange('unknown', v)}
+              />
+            </div>
+          </CollapsibleSection>
         </div>
 
         {/* Apply/Discard Changes */}
@@ -498,38 +820,28 @@ export function SensorControlPage() {
             )}
             Reset to Defaults
           </button>
-        </div>
-      </div>
 
-      {/* Current Values Card */}
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h3 className="text-sm font-medium text-gray-300 uppercase tracking-wide mb-4">
-          Current Values
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Emission Interval</p>
-            <p className="mt-1 text-2xl font-bold text-green-400 font-mono">
-              {formatInterval(config.emission_interval_ms)}
-              <span className="text-sm text-gray-500 ml-1">{getIntervalUnit(config.emission_interval_ms)}</span>
-            </p>
-          </div>
-          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Track Count</p>
-            <p className="mt-1 text-2xl font-bold text-blue-400 font-mono">
-              {config.track_count}
-              <span className="text-sm text-gray-500 ml-1">tracks</span>
-            </p>
-          </div>
-          <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Status</p>
-            <p className={clsx(
-              'mt-1 text-2xl font-bold font-mono',
-              config.paused ? 'text-yellow-400' : 'text-green-400'
-            )}>
-              {config.paused ? 'PAUSED' : 'ACTIVE'}
-            </p>
-          </div>
+          {/* Clear All Button */}
+          <button
+            onClick={handleClearAll}
+            disabled={!canClear}
+            title={!config.paused ? 'Pause sensors first' : undefined}
+            className={clsx(
+              'px-6 py-3 text-sm font-medium rounded-lg transition-colors flex items-center gap-2',
+              canClear
+                ? 'bg-red-600 hover:bg-red-700 text-white border border-red-600'
+                : 'bg-gray-700 text-gray-500 border border-gray-600 cursor-not-allowed'
+            )}
+          >
+            {clearAllMutation.isPending ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            )}
+            Clear All Data
+          </button>
         </div>
       </div>
 
