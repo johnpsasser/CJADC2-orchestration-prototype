@@ -1,0 +1,36 @@
+{
+  "clearances": {
+    "sensor-001": 1,
+    "sensor-002": 1,
+    "classifier-001": 2,
+    "correlator-001": 2,
+    "planner-001": 3,
+    "authorizer-001": 3,
+    "effector-001": 3
+  },
+  "allowed_processors": {
+    "detection": ["sensor", "classifier"],
+    "track": ["classifier", "correlator", "planner"],
+    "proposal": ["planner", "authorizer"],
+    "decision": ["authorizer", "effector"],
+    "effect": ["effector"]
+  },
+  "classification_levels": {
+    "unclassified": 0,
+    "confidential": 1,
+    "secret": 2,
+    "top_secret": 3
+  },
+  "human_approval_required": [
+    "engage",
+    "intercept",
+    "jam",
+    "deploy"
+  ],
+  "auto_approve_actions": {
+    "track": {"max_priority": 3},
+    "identify": {"max_priority": 5},
+    "monitor": {"max_priority": 5},
+    "ignore": {"max_priority": 10}
+  }
+}

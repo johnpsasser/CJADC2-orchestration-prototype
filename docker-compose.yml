@@ -1,0 +1,276 @@
+version: '3.8'
+
+services:
+  # ==================== Infrastructure ====================
+
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    volumes:
+      - ./configs/nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - nats-data:/data/jetstream
+    command: ["-c", "/etc/nats/nats-server.conf"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - cjadc2
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: cjadc2
+      POSTGRES_USER: cjadc2
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+    volumes:
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cjadc2"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - cjadc2
+
+  opa:
+    image: openpolicyagent/opa:0.60.0
+    platform: linux/amd64
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies/bundles:/bundles:ro
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--bundle"
+      - "/bundles/cjadc2"
+      - "--log-level=info"
+      - "--log-format=json"
+    healthcheck:
+      test: ["CMD", "/opa", "eval", "true"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - cjadc2
+
+  # ==================== Observability ====================
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./configs/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - cjadc2
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - cjadc2
+
+  # ==================== Agents ====================
+
+  sensor-sim:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.agent
+      args:
+        AGENT_TYPE: sensor
+    environment:
+      AGENT_ID: sensor-001
+      AGENT_TYPE: sensor
+      NATS_URL: nats://nats:4222
+      OPA_URL: http://opa:8181
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      EMISSION_INTERVAL: 5s
+      TRACK_COUNT: 5
+    depends_on:
+      nats:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cjadc2
+
+  classifier:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.agent
+      args:
+        AGENT_TYPE: classifier
+    environment:
+      AGENT_ID: classifier-001
+      AGENT_TYPE: classifier
+      NATS_URL: nats://nats:4222
+      OPA_URL: http://opa:8181
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    depends_on:
+      nats:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cjadc2
+
+  correlator:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.agent
+      args:
+        AGENT_TYPE: correlator
+    environment:
+      AGENT_ID: correlator-001
+      AGENT_TYPE: correlator
+      NATS_URL: nats://nats:4222
+      OPA_URL: http://opa:8181
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      CORRELATION_WINDOW: 10s
+    depends_on:
+      nats:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cjadc2
+
+  planner:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.agent
+      args:
+        AGENT_TYPE: planner
+    environment:
+      AGENT_ID: planner-001
+      AGENT_TYPE: planner
+      NATS_URL: nats://nats:4222
+      OPA_URL: http://opa:8181
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    depends_on:
+      nats:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cjadc2
+
+  authorizer:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.agent
+      args:
+        AGENT_TYPE: authorizer
+    environment:
+      AGENT_ID: authorizer-001
+      AGENT_TYPE: authorizer
+      NATS_URL: nats://nats:4222
+      OPA_URL: http://opa:8181
+      DATABASE_URL: postgres://cjadc2:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/cjadc2?sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    depends_on:
+      nats:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cjadc2
+
+  effector:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.agent
+      args:
+        AGENT_TYPE: effector
+    environment:
+      AGENT_ID: effector-001
+      AGENT_TYPE: effector
+      NATS_URL: nats://nats:4222
+      OPA_URL: http://opa:8181
+      DATABASE_URL: postgres://cjadc2:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/cjadc2?sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    depends_on:
+      nats:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cjadc2
+
+  # ==================== API Gateway ====================
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: build/Dockerfile.api
+    ports:
+      - "8080:8080"
+    environment:
+      NATS_URL: nats://nats:4222
+      OPA_URL: http://opa:8181
+      POSTGRES_URL: postgres://cjadc2:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/cjadc2?sslmode=disable
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    depends_on:
+      nats:
+        condition: service_healthy
+      opa:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cjadc2
+
+  # ==================== UI ====================
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_URL: http://localhost:8080/api/v1
+      VITE_WS_URL: ws://localhost:8080/ws
+    depends_on:
+      - api-gateway
+    networks:
+      - cjadc2
+
+volumes:
+  nats-data:
+  postgres-data:
+  prometheus-data:
+
+networks:
+  cjadc2:
+    name: cjadc2-network

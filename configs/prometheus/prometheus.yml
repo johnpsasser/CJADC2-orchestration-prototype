@@ -1,0 +1,55 @@
+# Prometheus configuration for CJADC2 platform
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'cjadc2-monitor'
+
+scrape_configs:
+  # NATS monitoring
+  - job_name: 'nats'
+    static_configs:
+      - targets: ['nats:8222']
+    metrics_path: /metrics
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: /metrics
+
+  # Agents - all expose metrics on :9090
+  - job_name: 'sensor'
+    static_configs:
+      - targets: ['sensor-sim:9090']
+
+  - job_name: 'classifier'
+    static_configs:
+      - targets: ['classifier:9090']
+
+  - job_name: 'correlator'
+    static_configs:
+      - targets: ['correlator:9090']
+
+  - job_name: 'planner'
+    static_configs:
+      - targets: ['planner:9090']
+
+  - job_name: 'authorizer'
+    static_configs:
+      - targets: ['authorizer:9090']
+
+  - job_name: 'effector'
+    static_configs:
+      - targets: ['effector:9090']
+
+  # OPA metrics
+  - job_name: 'opa'
+    static_configs:
+      - targets: ['opa:8181']
+    metrics_path: /metrics
+
+  # PostgreSQL (if using postgres_exporter)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
