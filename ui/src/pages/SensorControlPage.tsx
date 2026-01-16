@@ -291,6 +291,128 @@ const DEFAULT_CLASSIFICATION_WEIGHTS: ClassificationWeights = {
   unknown: 25,
 };
 
+/**
+ * Adjusts weights proportionally so they always sum to 100.
+ * When one slider changes, the others adjust proportionally to absorb the delta.
+ *
+ * @param weights - Current weight values as an object
+ * @param changedKey - The key that was changed by the user
+ * @param newValue - The new value for the changed key
+ * @returns New weights object with values summing to 100
+ */
+function adjustTypeWeightsProportionally(
+  weights: TrackTypeWeights,
+  changedKey: keyof TrackTypeWeights,
+  newValue: number
+): TrackTypeWeights {
+  const entries = Object.entries(weights) as [keyof TrackTypeWeights, number][];
+  const oldValue = weights[changedKey];
+
+  // If no change, return original weights
+  if (newValue === oldValue) {
+    return weights;
+  }
+
+  // Clamp the new value to valid range
+  const clampedNewValue = Math.max(0, Math.min(100, newValue));
+
+  // Get other keys and their total
+  const otherEntries = entries.filter(([k]) => k !== changedKey);
+  const otherTotal = otherEntries.reduce((sum, [, v]) => sum + v, 0);
+
+  // Edge case: if other sliders sum to 0, we can't redistribute
+  if (otherTotal === 0) {
+    return { ...weights, [changedKey]: Math.min(100, clampedNewValue) };
+  }
+
+  // Calculate target for other sliders
+  const targetOtherTotal = 100 - clampedNewValue;
+
+  // Calculate proportional values for other sliders
+  const proportionalValues: { key: keyof TrackTypeWeights; value: number }[] = [];
+  for (const [key, value] of otherEntries) {
+    const proportion = value / otherTotal;
+    const rawValue = Math.max(0, targetOtherTotal * proportion);
+    proportionalValues.push({ key, value: rawValue });
+  }
+
+  // Round values to integers while maintaining sum of 100
+  let remainingTotal = targetOtherTotal;
+  const result: TrackTypeWeights = { ...weights, [changedKey]: clampedNewValue };
+
+  for (let i = 0; i < proportionalValues.length; i++) {
+    const { key, value } = proportionalValues[i];
+    if (i === proportionalValues.length - 1) {
+      // Last item gets the remainder to ensure sum is exactly 100
+      result[key] = Math.max(0, remainingTotal);
+    } else {
+      const rounded = Math.round(value);
+      result[key] = rounded;
+      remainingTotal -= rounded;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Adjusts classification weights proportionally so they always sum to 100.
+ */
+function adjustClassificationWeightsProportionally(
+  weights: ClassificationWeights,
+  changedKey: keyof ClassificationWeights,
+  newValue: number
+): ClassificationWeights {
+  const entries = Object.entries(weights) as [keyof ClassificationWeights, number][];
+  const oldValue = weights[changedKey];
+
+  // If no change, return original weights
+  if (newValue === oldValue) {
+    return weights;
+  }
+
+  // Clamp the new value to valid range
+  const clampedNewValue = Math.max(0, Math.min(100, newValue));
+
+  // Get other keys and their total
+  const otherEntries = entries.filter(([k]) => k !== changedKey);
+  const otherTotal = otherEntries.reduce((sum, [, v]) => sum + v, 0);
+
+  // Edge case: if other sliders sum to 0, we can't redistribute
+  if (otherTotal === 0) {
+    return { ...weights, [changedKey]: Math.min(100, clampedNewValue) };
+  }
+
+  // Calculate target for other sliders
+  const targetOtherTotal = 100 - clampedNewValue;
+
+  // Calculate proportional values for other sliders
+  const proportionalValues: { key: keyof ClassificationWeights; value: number }[] = [];
+  for (const [key, value] of otherEntries) {
+    const proportion = value / otherTotal;
+    const rawValue = Math.max(0, targetOtherTotal * proportion);
+    proportionalValues.push({ key, value: rawValue });
+  }
+
+  // Round values to integers while maintaining sum of 100
+  let remainingTotal = targetOtherTotal;
+  const result: ClassificationWeights = { ...weights, [changedKey]: clampedNewValue };
+
+  for (let i = 0; i < proportionalValues.length; i++) {
+    const { key, value } = proportionalValues[i];
+    if (i === proportionalValues.length - 1) {
+      // Last item gets the remainder to ensure sum is exactly 100
+      result[key] = Math.max(0, remainingTotal);
+    } else {
+      const rounded = Math.round(value);
+      result[key] = rounded;
+      remainingTotal -= rounded;
+    }
+  }
+
+  return result;
+}
+
 // Main SensorControlPage component
 export function SensorControlPage() {
   const queryClient = useQueryClient();
@@ -420,9 +542,10 @@ export function SensorControlPage() {
   const handleTypeWeightChange = useCallback((key: keyof TrackTypeWeights, value: number) => {
     if (localConfig) {
       const currentWeights = localConfig.type_weights || DEFAULT_TYPE_WEIGHTS;
+      const adjustedWeights = adjustTypeWeightsProportionally(currentWeights, key, value);
       setLocalConfig({
         ...localConfig,
-        type_weights: { ...currentWeights, [key]: value },
+        type_weights: adjustedWeights,
       });
       setHasChanges(true);
     }
@@ -431,9 +554,10 @@ export function SensorControlPage() {
   const handleClassificationWeightChange = useCallback((key: keyof ClassificationWeights, value: number) => {
     if (localConfig) {
       const currentWeights = localConfig.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS;
+      const adjustedWeights = adjustClassificationWeightsProportionally(currentWeights, key, value);
       setLocalConfig({
         ...localConfig,
-        classification_weights: { ...currentWeights, [key]: value },
+        classification_weights: adjustedWeights,
       });
       setHasChanges(true);
     }
@@ -627,16 +751,12 @@ export function SensorControlPage() {
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-500">Adjust weights to control track type distribution</span>
-                <span className={clsx(
-                  'text-xs font-mono',
-                  (() => {
-                    const weights = config.type_weights || DEFAULT_TYPE_WEIGHTS;
-                    const sum = Object.values(weights).reduce((a, b) => a + b, 0);
-                    return sum === 100 ? 'text-green-400' : 'text-yellow-400';
-                  })()
-                )}>
-                  Total: {Object.values(config.type_weights || DEFAULT_TYPE_WEIGHTS).reduce((a, b) => a + b, 0)}%
+                <span className="text-xs text-gray-500">Adjust one slider and others auto-adjust to total 100%</span>
+                <span className="text-xs font-mono text-green-400 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Total: 100%
                 </span>
               </div>
               <WeightSlider
@@ -685,16 +805,12 @@ export function SensorControlPage() {
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-gray-500">Adjust weights to control classification distribution</span>
-                <span className={clsx(
-                  'text-xs font-mono',
-                  (() => {
-                    const weights = config.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS;
-                    const sum = Object.values(weights).reduce((a, b) => a + b, 0);
-                    return sum === 100 ? 'text-green-400' : 'text-yellow-400';
-                  })()
-                )}>
-                  Total: {Object.values(config.classification_weights || DEFAULT_CLASSIFICATION_WEIGHTS).reduce((a, b) => a + b, 0)}%
+                <span className="text-xs text-gray-500">Adjust one slider and others auto-adjust to total 100%</span>
+                <span className="text-xs font-mono text-green-400 flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Total: 100%
                 </span>
               </div>
               <WeightSlider

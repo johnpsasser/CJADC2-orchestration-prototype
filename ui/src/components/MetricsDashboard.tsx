@@ -123,23 +123,6 @@ function StageMetricsCard({ stage }: { stage: StageMetrics }) {
           <p className="text-xs text-gray-500">Failed</p>
         </div>
       </div>
-
-      <div className="mt-3 pt-3 border-t border-gray-700">
-        <div className="flex justify-between text-xs">
-          <span className="text-gray-500">Latency</span>
-          <div className="flex gap-3">
-            <span className="text-gray-400">
-              p50: <span className="text-gray-300">{stage.latency_p50_ms}ms</span>
-            </span>
-            <span className="text-gray-400">
-              p95: <span className="text-gray-300">{stage.latency_p95_ms}ms</span>
-            </span>
-            <span className="text-gray-400">
-              p99: <span className="text-gray-300">{stage.latency_p99_ms}ms</span>
-            </span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
