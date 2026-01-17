@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { sensorApi, SensorConfig, SensorAPIError } from '../api/sensor';
+import { sensorApi, SensorConfig, SensorAPIError, ClearStreamsResponse } from '../api/sensor';
 import { clearApi, APIClientError } from '../api/client';
 import type { TrackTypeWeights, ClassificationWeights } from '../types';
+import { ConfirmationModal } from '../components/ConfirmationModal';
+
+// Modal state type
+type ModalType = 'clearAll' | 'clearQueue' | null;
 
 // Toast notification component
 interface ToastProps {
@@ -426,6 +430,9 @@ export function SensorControlPage() {
   const [typeWeightsOpen, setTypeWeightsOpen] = useState(false);
   const [classificationWeightsOpen, setClassificationWeightsOpen] = useState(false);
 
+  // Modal state
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
+
   // Fetch current configuration
   const { data: configData, isLoading, error, refetch } = useQuery({
     queryKey: ['sensorConfig'],
@@ -513,6 +520,7 @@ export function SensorControlPage() {
       queryClient.invalidateQueries({ queryKey: ['decisions'] });
       queryClient.invalidateQueries({ queryKey: ['effects'] });
       const totalDeleted = data.deleted.tracks + data.deleted.proposals + data.deleted.decisions + data.deleted.effects + data.deleted.detections;
+      setActiveModal(null);
       setToast({
         message: `Cleared ${totalDeleted} records`,
         type: 'success'
@@ -520,6 +528,27 @@ export function SensorControlPage() {
     },
     onError: (error) => {
       const message = error instanceof APIClientError ? error.message : 'Failed to clear data';
+      setActiveModal(null);
+      setToast({ message, type: 'error' });
+    },
+  });
+
+  // Clear message queue mutation
+  const clearQueueMutation = useMutation({
+    mutationFn: async (): Promise<ClearStreamsResponse> => {
+      const response = await sensorApi.clearStreams();
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setActiveModal(null);
+      setToast({
+        message: data.message || 'Message queue cleared',
+        type: 'success'
+      });
+    },
+    onError: (error) => {
+      const message = error instanceof SensorAPIError ? error.message : 'Failed to clear message queue';
+      setActiveModal(null);
       setToast({ message, type: 'error' });
     },
   });
@@ -595,13 +624,27 @@ export function SensorControlPage() {
     if (!localConfig?.paused) {
       return; // Should not be callable when sensors are running
     }
-    const confirmed = window.confirm(
-      'Are you sure you want to clear all data? This will permanently delete all tracks, proposals, decisions, and effects.'
-    );
-    if (confirmed) {
-      clearAllMutation.mutate();
+    setActiveModal('clearAll');
+  }, [localConfig]);
+
+  const handleClearQueue = useCallback(() => {
+    if (!localConfig?.paused) {
+      return; // Should not be callable when sensors are running
     }
-  }, [localConfig, clearAllMutation]);
+    setActiveModal('clearQueue');
+  }, [localConfig]);
+
+  const handleConfirmClearAll = useCallback(() => {
+    clearAllMutation.mutate();
+  }, [clearAllMutation]);
+
+  const handleConfirmClearQueue = useCallback(() => {
+    clearQueueMutation.mutate();
+  }, [clearQueueMutation]);
+
+  const handleCloseModal = useCallback(() => {
+    setActiveModal(null);
+  }, []);
 
   // Format emission interval for display
   const formatInterval = (ms: number): string => {
@@ -663,8 +706,9 @@ export function SensorControlPage() {
   const config = localConfig || configData;
   if (!config) return null;
 
-  const isMutating = updateMutation.isPending || resetMutation.isPending || togglePauseMutation.isPending || clearAllMutation.isPending;
+  const isMutating = updateMutation.isPending || resetMutation.isPending || togglePauseMutation.isPending || clearAllMutation.isPending || clearQueueMutation.isPending;
   const canClear = config.paused && !isMutating;
+  const canClearQueue = config.paused && !isMutating;
 
   return (
     <div className="space-y-6">
@@ -673,9 +717,6 @@ export function SensorControlPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-100">Sensor Simulator Control Panel</h2>
-            <p className="text-sm text-gray-400 mt-1">
-              Configure the synthetic sensor simulation parameters
-            </p>
           </div>
           <StatusIndicator paused={config.paused} isLoading={isMutating} />
         </div>
@@ -698,7 +739,6 @@ export function SensorControlPage() {
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Track Count</p>
             <p className="mt-1 text-2xl font-bold text-blue-400 font-mono">
               {config.track_count}
-              <span className="text-sm text-gray-500 ml-1">tracks</span>
             </p>
           </div>
           <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
@@ -937,6 +977,28 @@ export function SensorControlPage() {
             Reset to Defaults
           </button>
 
+          {/* Clear Queue Button */}
+          <button
+            onClick={handleClearQueue}
+            disabled={!canClearQueue}
+            title={!config.paused ? 'Pause sensor first to clear the message queue' : 'Discard all pending messages in the pipeline'}
+            className={clsx(
+              'px-6 py-3 text-sm font-medium rounded-lg transition-colors flex items-center gap-2',
+              canClearQueue
+                ? 'bg-orange-600 hover:bg-orange-700 text-white border border-orange-600'
+                : 'bg-gray-700 text-gray-500 border border-gray-600 cursor-not-allowed'
+            )}
+          >
+            {clearQueueMutation.isPending ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+              </svg>
+            )}
+            Clear Queue
+          </button>
+
           {/* Clear All Button */}
           <button
             onClick={handleClearAll}
@@ -960,6 +1022,57 @@ export function SensorControlPage() {
           </button>
         </div>
       </div>
+
+      {/* Clear All Data Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={activeModal === 'clearAll'}
+        onClose={handleCloseModal}
+        onConfirm={handleConfirmClearAll}
+        variant="danger"
+        title="Delete All Data"
+        message="This action will permanently delete all data from the system. This cannot be undone."
+        confirmText="Delete All"
+        cancelText="Cancel"
+        isLoading={clearAllMutation.isPending}
+        details={[
+          'All tracks will be deleted',
+          'All proposals will be deleted',
+          'All decisions will be deleted',
+          'All effects will be deleted',
+          'All detection records will be deleted',
+        ]}
+        icon={
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        }
+      />
+
+      {/* Clear Message Queue Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={activeModal === 'clearQueue'}
+        onClose={handleCloseModal}
+        onConfirm={handleConfirmClearQueue}
+        variant="warning"
+        title="Clear Message Queue"
+        message="This will discard all pending messages in the NATS JetStream pipeline. Messages that haven't been processed by downstream agents will be lost."
+        confirmText="Clear Queue"
+        cancelText="Cancel"
+        isLoading={clearQueueMutation.isPending}
+        details={[
+          'DETECTIONS stream will be purged',
+          'TRACKS stream will be purged',
+          'PROPOSALS stream will be purged',
+          'DECISIONS stream will be purged',
+          'EFFECTS stream will be purged',
+          'All consumers will be recreated',
+        ]}
+        icon={
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+          </svg>
+        }
+      />
 
       {/* Toast Notification */}
       {toast && (
