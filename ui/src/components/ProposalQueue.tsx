@@ -37,6 +37,14 @@ const threatLevelColors: Record<ThreatLevel, string> = {
   unknown: 'text-gray-400',
 };
 
+// Classification colors (matching TrackTable)
+const classificationColors: Record<string, string> = {
+  hostile: 'bg-red-600 text-white',
+  friendly: 'bg-blue-600 text-white',
+  neutral: 'bg-gray-500 text-white',
+  unknown: 'bg-gray-700 text-gray-300',
+};
+
 // Get priority level from numeric priority
 function getPriorityLevel(priority: number): string {
   if (priority >= 9) return 'critical';
@@ -164,6 +172,14 @@ function ProposalCard({ proposal, onApprove, onDeny }: ProposalCardProps) {
           <span className={clsx('text-sm font-medium', threatLevelColors[proposal.threat_level])}>
             {proposal.threat_level.toUpperCase()}
           </span>
+          <span className="text-gray-600">|</span>
+          <span className="text-xs text-gray-500">Class:</span>
+          <span className={clsx(
+            'px-1.5 py-0.5 text-xs font-medium rounded capitalize',
+            classificationColors[proposal.track?.classification || 'unknown'] || classificationColors.unknown
+          )}>
+            {proposal.track?.classification || 'unknown'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">Track:</span>
@@ -248,6 +264,9 @@ function ProposalListView({ proposals, onApprove, onDeny }: ProposalListViewProp
               Type
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Classification
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Threat Level
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -299,6 +318,14 @@ function ProposalListView({ proposals, onApprove, onDeny }: ProposalListViewProp
                 </td>
                 <td className="px-4 py-3">
                   <span className="text-sm text-gray-300 capitalize">{proposal.track?.type || 'unknown'}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={clsx(
+                    'inline-flex px-2 py-1 text-xs font-medium rounded capitalize',
+                    classificationColors[proposal.track?.classification || 'unknown'] || classificationColors.unknown
+                  )}>
+                    {proposal.track?.classification || 'unknown'}
+                  </span>
                 </td>
                 <td className="px-4 py-3">
                   <span
