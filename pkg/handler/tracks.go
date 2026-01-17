@@ -92,6 +92,11 @@ func (h *TrackHandler) ListTracks(w http.ResponseWriter, r *http.Request) {
 		if since, err := time.Parse(time.RFC3339, sinceStr); err == nil {
 			filter.Since = &since
 		}
+	} else {
+		// Default: only return tracks updated within the last 60 seconds
+		// This ensures stale tracks are automatically filtered out
+		defaultSince := time.Now().Add(-60 * time.Second)
+		filter.Since = &defaultSince
 	}
 
 	tracks, err := h.db.ListTracks(ctx, filter)

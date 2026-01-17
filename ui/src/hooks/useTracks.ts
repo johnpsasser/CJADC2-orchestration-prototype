@@ -4,10 +4,11 @@ import { create } from 'zustand';
 import { api } from '../api/client';
 import type { CorrelatedTrack, SortConfig } from '../types';
 
-// How long before a track is considered stale (2 minutes)
-const STALE_TRACK_AGE_MS = 2 * 60 * 1000;
-// How often to check for stale tracks (30 seconds)
-const STALE_CHECK_INTERVAL_MS = 30 * 1000;
+// How long before a track is considered stale (30 seconds)
+// This ensures tracks are purged shortly after sensor config changes
+const STALE_TRACK_AGE_MS = 30 * 1000;
+// How often to check for stale tracks (10 seconds)
+const STALE_CHECK_INTERVAL_MS = 10 * 1000;
 
 // Zustand store for track state
 interface TrackStore {
@@ -147,8 +148,8 @@ export function useTracks() {
       setTracks(response.data);
       return response.data;
     },
-    refetchInterval: 30000, // Refetch every 30 seconds as backup
-    staleTime: 10000,
+    refetchInterval: 10000, // Refetch every 10 seconds to sync with backend
+    staleTime: 5000,
   });
 
   // Handle WebSocket track update
