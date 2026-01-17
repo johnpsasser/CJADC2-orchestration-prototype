@@ -54,6 +54,15 @@ type ProposalListResponse struct {
 	CorrelationID string             `json:"correlation_id"`
 }
 
+// TrackInfo contains minimal track information for proposals
+type TrackInfo struct {
+	TrackID        string  `json:"track_id"`
+	Classification string  `json:"classification"`
+	Type           string  `json:"type"`
+	ThreatLevel    string  `json:"threat_level"`
+	Confidence     float64 `json:"confidence"`
+}
+
 // ProposalResponse represents a single proposal in API responses
 type ProposalResponse struct {
 	ProposalID     string          `json:"proposal_id"`
@@ -66,6 +75,7 @@ type ProposalResponse struct {
 	ExpiresAt      time.Time       `json:"expires_at"`
 	CreatedAt      time.Time       `json:"created_at"`
 	PolicyDecision json.RawMessage `json:"policy_decision,omitempty"`
+	Track          *TrackInfo      `json:"track,omitempty"`
 }
 
 // ListProposals handles GET /api/v1/proposals
@@ -102,6 +112,23 @@ func (h *ProposalHandler) ListProposals(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Collect unique track IDs and fetch track data
+	trackMap := make(map[string]*TrackInfo)
+	for _, p := range proposals {
+		if _, exists := trackMap[p.TrackID]; !exists {
+			track, err := h.db.GetTrack(ctx, p.TrackID)
+			if err == nil && track != nil {
+				trackMap[p.TrackID] = &TrackInfo{
+					TrackID:        track.ExternalID,
+					Classification: track.Classification,
+					Type:           track.Type,
+					ThreatLevel:    track.ThreatLevel,
+					Confidence:     track.Confidence,
+				}
+			}
+		}
+	}
+
 	response := ProposalListResponse{
 		Proposals:     make([]ProposalResponse, 0, len(proposals)),
 		Total:         len(proposals),
@@ -111,7 +138,7 @@ func (h *ProposalHandler) ListProposals(w http.ResponseWriter, r *http.Request) 
 	}
 
 	for _, p := range proposals {
-		response.Proposals = append(response.Proposals, ProposalResponse{
+		pr := ProposalResponse{
 			ProposalID:     p.ProposalID,
 			TrackID:        p.TrackID,
 			ActionType:     p.ActionType,
@@ -122,7 +149,11 @@ func (h *ProposalHandler) ListProposals(w http.ResponseWriter, r *http.Request) 
 			ExpiresAt:      p.ExpiresAt,
 			CreatedAt:      p.CreatedAt,
 			PolicyDecision: p.PolicyDecision,
-		})
+		}
+		if track, exists := trackMap[p.TrackID]; exists {
+			pr.Track = track
+		}
+		response.Proposals = append(response.Proposals, pr)
 	}
 
 	WriteJSON(w, http.StatusOK, response)
@@ -157,6 +188,19 @@ func (h *ProposalHandler) GetProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch track data
+	var trackInfo *TrackInfo
+	track, err := h.db.GetTrack(ctx, proposal.TrackID)
+	if err == nil && track != nil {
+		trackInfo = &TrackInfo{
+			TrackID:        track.ExternalID,
+			Classification: track.Classification,
+			Type:           track.Type,
+			ThreatLevel:    track.ThreatLevel,
+			Confidence:     track.Confidence,
+		}
+	}
+
 	response := ProposalDetailResponse{
 		Proposal: ProposalResponse{
 			ProposalID:     proposal.ProposalID,
@@ -169,6 +213,7 @@ func (h *ProposalHandler) GetProposal(w http.ResponseWriter, r *http.Request) {
 			ExpiresAt:      proposal.ExpiresAt,
 			CreatedAt:      proposal.CreatedAt,
 			PolicyDecision: proposal.PolicyDecision,
+			Track:          trackInfo,
 		},
 		CorrelationID: correlationID,
 	}
