@@ -164,6 +164,10 @@ function ProposalCard({ proposal, onApprove, onDeny }: ProposalCardProps) {
           <span className="font-mono text-sm text-gray-300">{proposal.track_id}</span>
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Type:</span>
+          <span className="text-sm text-gray-300 capitalize">{proposal.track?.type || 'unknown'}</span>
+        </div>
+        <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">Threat:</span>
           <span className={clsx('text-sm font-medium', threatLevelColors[proposal.threat_level])}>
             {proposal.threat_level.toUpperCase()}
@@ -237,6 +241,9 @@ function ProposalListView({ proposals, onApprove, onDeny }: ProposalListViewProp
               Track ID
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Type
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Threat Level
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -282,6 +289,9 @@ function ProposalListView({ proposals, onApprove, onDeny }: ProposalListViewProp
                 </td>
                 <td className="px-4 py-3">
                   <span className="font-mono text-sm text-gray-300">{proposal.track_id}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="text-sm text-gray-300 capitalize">{proposal.track?.type || 'unknown'}</span>
                 </td>
                 <td className="px-4 py-3">
                   <span
