@@ -2,7 +2,7 @@
 
 **Combined Joint All-Domain Command and Control** - An event-driven orchestration platform for accelerating complex mission decision chains with human-in-the-loop approval gates.
 
-![System Architecture](docs/images/system-architecture.png)
+![System Architecture](docs/cjadc2-system-architecture.png)
 
 ## Overview
 
