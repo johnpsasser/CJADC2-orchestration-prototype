@@ -1394,10 +1394,11 @@ func (p *Pool) ListAuditEntries(ctx context.Context, filter AuditFilter) ([]Audi
 	return entries, nil
 }
 
-// CountActiveTracks returns the count of active tracks
+// CountActiveTracks returns the count of active tracks updated within the last 60 seconds
+// This matches the default filter used by the tracks API endpoint
 func (p *Pool) CountActiveTracks(ctx context.Context) (int64, error) {
 	var count int64
-	err := p.QueryRow(ctx, "SELECT COUNT(*) FROM tracks WHERE state = 'active'").Scan(&count)
+	err := p.QueryRow(ctx, "SELECT COUNT(*) FROM tracks WHERE state = 'active' AND last_updated > NOW() - INTERVAL '60 seconds'").Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count active tracks: %w", err)
 	}
