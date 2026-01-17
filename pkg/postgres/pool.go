@@ -287,6 +287,66 @@ func (p *Pool) GetTrack(ctx context.Context, trackID string) (*TrackRow, error) 
 	return &t, nil
 }
 
+// UpsertTrack inserts or updates a track from a CorrelatedTrack message
+func (p *Pool) UpsertTrack(ctx context.Context, track *messages.CorrelatedTrack) error {
+	query := `
+		INSERT INTO tracks (
+			external_track_id, classification, type, threat_level,
+			position_lat, position_lon, position_alt,
+			velocity_speed, velocity_heading,
+			confidence, sources, detection_count,
+			first_seen, last_updated, state
+		) VALUES (
+			$1, $2, $3, $4,
+			$5, $6, $7,
+			$8, $9,
+			$10, $11, $12,
+			$13, $14, 'active'
+		)
+		ON CONFLICT (external_track_id) DO UPDATE SET
+			classification = EXCLUDED.classification,
+			type = EXCLUDED.type,
+			threat_level = EXCLUDED.threat_level,
+			position_lat = EXCLUDED.position_lat,
+			position_lon = EXCLUDED.position_lon,
+			position_alt = EXCLUDED.position_alt,
+			velocity_speed = EXCLUDED.velocity_speed,
+			velocity_heading = EXCLUDED.velocity_heading,
+			confidence = EXCLUDED.confidence,
+			sources = EXCLUDED.sources,
+			detection_count = EXCLUDED.detection_count,
+			last_updated = EXCLUDED.last_updated,
+			state = 'active'
+	`
+
+	firstSeen := track.WindowStart
+	if track.LastUpdated.Before(firstSeen) {
+		firstSeen = track.LastUpdated
+	}
+
+	_, err := p.Exec(ctx, query,
+		track.TrackID,
+		track.Classification,
+		track.Type,
+		track.ThreatLevel,
+		track.Position.Lat,
+		track.Position.Lon,
+		track.Position.Alt,
+		track.Velocity.Speed,
+		track.Velocity.Heading,
+		track.Confidence,
+		track.Sources,
+		track.DetectionCount,
+		firstSeen,
+		track.LastUpdated,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to upsert track: %w", err)
+	}
+
+	return nil
+}
+
 // DetectionRow represents a detection stored in the database
 type DetectionRow struct {
 	DetectionID   string          `json:"detection_id"`
@@ -918,11 +978,23 @@ type RealTimeStageMetrics struct {
 func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetrics, error) {
 	stages := []RealTimeStageMetrics{}
 
-	// Get proposal count for the last 5 minutes - this represents the pipeline throughput
-	// since every proposal requires sensor → classifier → correlator → planner to complete
+	// Get track count for the last 5 minutes - this represents actual pipeline throughput
+	var trackCount int64
+	var trackLastUpdated time.Time
+	err := p.QueryRow(ctx, `
+		SELECT COUNT(*), COALESCE(MAX(last_updated), NOW())
+		FROM tracks
+		WHERE last_updated >= NOW() - INTERVAL '5 minutes'
+	`).Scan(&trackCount, &trackLastUpdated)
+	if err != nil {
+		trackCount = 0
+		trackLastUpdated = time.Now()
+	}
+
+	// Get proposal count for the planner stage
 	var proposalCount int64
 	var proposalLastUpdated time.Time
-	err := p.QueryRow(ctx, `
+	err = p.QueryRow(ctx, `
 		SELECT COUNT(*), COALESCE(MAX(created_at), NOW())
 		FROM proposals
 		WHERE created_at >= NOW() - INTERVAL '5 minutes'
@@ -932,42 +1004,42 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 		proposalLastUpdated = time.Now()
 	}
 
-	// Sensor stage - use proposal count as proxy (every proposal started as a detection)
+	// Sensor stage - use track count (every track started as a detection)
 	sensor := RealTimeStageMetrics{
 		Stage:       "sensor",
-		Processed:   proposalCount,
-		Succeeded:   proposalCount,
+		Processed:   trackCount,
+		Succeeded:   trackCount,
 		Failed:      0,
-		LastUpdated: proposalLastUpdated,
+		LastUpdated: trackLastUpdated,
 	}
 	stages = append(stages, sensor)
 
 	// Classifier stage - same throughput as sensor
 	classifier := RealTimeStageMetrics{
 		Stage:       "classifier",
-		Processed:   proposalCount,
-		Succeeded:   proposalCount,
+		Processed:   trackCount,
+		Succeeded:   trackCount,
 		Failed:      0,
-		LastUpdated: proposalLastUpdated,
+		LastUpdated: trackLastUpdated,
 	}
 	stages = append(stages, classifier)
 
-	// Correlator stage - same throughput
+	// Correlator stage - same throughput (tracks are persisted after correlation)
 	correlator := RealTimeStageMetrics{
 		Stage:       "correlator",
-		Processed:   proposalCount,
-		Succeeded:   proposalCount,
+		Processed:   trackCount,
+		Succeeded:   trackCount,
 		Failed:      0,
-		LastUpdated: proposalLastUpdated,
+		LastUpdated: trackLastUpdated,
 	}
 	stages = append(stages, correlator)
 
-	// Planner stage - proposals created
+	// Planner stage - proposals created (only for tracks requiring action)
 	planner := RealTimeStageMetrics{
 		Stage:       "planner",
-		Processed:   proposalCount,
+		Processed:   trackCount,
 		Succeeded:   proposalCount,
-		Failed:      0,
+		Failed:      trackCount - proposalCount, // Tracks that didn't need proposals
 		LastUpdated: proposalLastUpdated,
 	}
 	stages = append(stages, planner)
@@ -1071,12 +1143,13 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 	return stages, nil
 }
 
-// GetMessagesPerMinute calculates current throughput from recent proposal activity
+// GetMessagesPerMinute calculates current throughput from recent track activity
 func (p *Pool) GetMessagesPerMinute(ctx context.Context) (float64, error) {
+	// Count track updates in the last minute to measure actual message throughput
 	query := `
 		SELECT COUNT(*) as count
-		FROM proposals
-		WHERE created_at >= NOW() - INTERVAL '1 minute'
+		FROM tracks
+		WHERE last_updated >= NOW() - INTERVAL '1 minute'
 	`
 	var count int64
 	err := p.QueryRow(ctx, query).Scan(&count)
@@ -1087,7 +1160,10 @@ func (p *Pool) GetMessagesPerMinute(ctx context.Context) (float64, error) {
 }
 
 // GetEndToEndLatencyMetrics returns real-time E2E latency percentiles
+// Measures decision pipeline latency (proposal → effect) when available,
+// falls back to track processing latency (first_seen → last_updated) otherwise
 func (p *Pool) GetEndToEndLatencyMetrics(ctx context.Context) (p50, p95, p99 float64, err error) {
+	// First try to get decision pipeline latency (proposal → effect)
 	query := `
 		SELECT
 			COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY latency_ms), 0) as p50,
@@ -1106,6 +1182,27 @@ func (p *Pool) GetEndToEndLatencyMetrics(ctx context.Context) (p50, p95, p99 flo
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("failed to get E2E latency: %w", err)
 	}
+
+	// If no decision latency data, use track processing latency as fallback
+	if p50 == 0 && p95 == 0 && p99 == 0 {
+		trackQuery := `
+			SELECT
+				COALESCE(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY latency_ms), 0) as p50,
+				COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency_ms), 0) as p95,
+				COALESCE(PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY latency_ms), 0) as p99
+			FROM (
+				SELECT EXTRACT(EPOCH FROM (last_updated - first_seen)) * 1000 as latency_ms
+				FROM tracks
+				WHERE last_updated >= NOW() - INTERVAL '5 minutes'
+				  AND last_updated > first_seen
+			) latencies
+		`
+		err = p.QueryRow(ctx, trackQuery).Scan(&p50, &p95, &p99)
+		if err != nil {
+			return 0, 0, 0, fmt.Errorf("failed to get track processing latency: %w", err)
+		}
+	}
+
 	return p50, p95, p99, nil
 }
 
@@ -1382,6 +1479,12 @@ func (p *Pool) ClearAll(ctx context.Context) (*ClearAllResult, error) {
 		return nil, fmt.Errorf("failed to delete from tracks: %w", err)
 	}
 	result.Tracks = tag.RowsAffected()
+
+	// Reset the messages_processed counter to 0
+	_, err = tx.Exec(ctx, "UPDATE system_counters SET counter_value = 0, last_updated = NOW() WHERE counter_name = 'messages_processed'")
+	if err != nil {
+		return nil, fmt.Errorf("failed to reset messages_processed counter: %w", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
