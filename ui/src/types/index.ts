@@ -201,6 +201,7 @@ export interface AuditEntry {
   effect_id?: string;
   status: 'proposed' | 'approved' | 'denied' | 'executed' | 'failed';
   details: string;
+  reason?: string;
 }
 
 // API response types

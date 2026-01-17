@@ -45,6 +45,7 @@ type AuditEntryResponse struct {
 	EffectID   *string `json:"effect_id,omitempty"`
 	Status     string  `json:"status"`
 	Details    string  `json:"details"`
+	Reason     *string `json:"reason,omitempty"`
 }
 
 // AuditEntriesResponse represents the response for audit entries
@@ -113,6 +114,9 @@ func (h *AuditHandler) GetAuditEntries(w http.ResponseWriter, r *http.Request) {
 		}
 		if e.EffectID != "" {
 			entry.EffectID = &e.EffectID
+		}
+		if e.Reason != "" {
+			entry.Reason = &e.Reason
 		}
 
 		responseEntries = append(responseEntries, entry)

@@ -1232,6 +1232,7 @@ type AuditEntry struct {
 	EffectID   string `json:"effect_id"`
 	Status     string `json:"status"`
 	Details    string `json:"details"`
+	Reason     string `json:"reason"`
 }
 
 // AuditFilter defines filter options for audit queries
@@ -1360,6 +1361,12 @@ func (p *Pool) ListAuditEntries(ctx context.Context, filter AuditFilter) ([]Audi
 			details = *reason
 		}
 
+		// Set reason from decision
+		reasonStr := ""
+		if reason != nil {
+			reasonStr = *reason
+		}
+
 		entry := AuditEntry{
 			ID:         decisionID,
 			Timestamp:  approvedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -1370,6 +1377,7 @@ func (p *Pool) ListAuditEntries(ctx context.Context, filter AuditFilter) ([]Audi
 			DecisionID: decisionID,
 			Status:     status,
 			Details:    details,
+			Reason:     reasonStr,
 		}
 
 		if effectID != nil {

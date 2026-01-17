@@ -91,7 +91,8 @@ export function AuditTrail({ className }: AuditTrailProps) {
           e.track_id.toLowerCase().includes(query) ||
           e.action_type.toLowerCase().includes(query) ||
           (e.user_id && e.user_id.toLowerCase().includes(query)) ||
-          e.details.toLowerCase().includes(query)
+          e.details.toLowerCase().includes(query) ||
+          (e.reason && e.reason.toLowerCase().includes(query))
       );
     }
 
@@ -155,7 +156,7 @@ export function AuditTrail({ className }: AuditTrailProps) {
             </svg>
             <input
               type="text"
-              placeholder="Search track ID, user, or details..."
+              placeholder="Search track ID, user, reason, or details..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-gray-900 border border-gray-700 rounded text-gray-200 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/50 focus:border-green-500"
@@ -371,7 +372,15 @@ export function AuditTrail({ className }: AuditTrailProps) {
                                       {entry.status}
                                     </span>
                                   </div>
-                                  <p className="mt-1 text-sm text-gray-300">{entry.details}</p>
+                                  {entry.details && (
+                                    <p className="mt-1 text-sm text-gray-400">{entry.details}</p>
+                                  )}
+                                  {entry.reason && (
+                                    <p className="mt-1 text-sm text-gray-300">
+                                      <span className="text-gray-500 font-medium">Reason: </span>
+                                      {entry.reason}
+                                    </p>
+                                  )}
                                   {entry.user_id && (
                                     <p className="mt-1 text-xs text-gray-500">
                                       By: {entry.user_id}
