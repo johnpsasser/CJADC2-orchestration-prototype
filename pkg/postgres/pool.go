@@ -978,16 +978,16 @@ type RealTimeStageMetrics struct {
 func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetrics, error) {
 	stages := []RealTimeStageMetrics{}
 
-	// Get track count for the last 5 minutes - this represents actual pipeline throughput
-	var trackCount int64
+	// Get message count for the last 5 minutes - SUM of detection_count represents actual message throughput
+	var messageCount int64
 	var trackLastUpdated time.Time
 	err := p.QueryRow(ctx, `
-		SELECT COUNT(*), COALESCE(MAX(last_updated), NOW())
+		SELECT COALESCE(SUM(detection_count), 0), COALESCE(MAX(last_updated), NOW())
 		FROM tracks
 		WHERE last_updated >= NOW() - INTERVAL '5 minutes'
-	`).Scan(&trackCount, &trackLastUpdated)
+	`).Scan(&messageCount, &trackLastUpdated)
 	if err != nil {
-		trackCount = 0
+		messageCount = 0
 		trackLastUpdated = time.Now()
 	}
 
@@ -1004,11 +1004,11 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 		proposalLastUpdated = time.Now()
 	}
 
-	// Sensor stage - use track count (every track started as a detection)
+	// Sensor stage - use message count (SUM of detection_count = total messages processed)
 	sensor := RealTimeStageMetrics{
 		Stage:       "sensor",
-		Processed:   trackCount,
-		Succeeded:   trackCount,
+		Processed:   messageCount,
+		Succeeded:   messageCount,
 		Failed:      0,
 		LastUpdated: trackLastUpdated,
 	}
@@ -1017,8 +1017,8 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 	// Classifier stage - same throughput as sensor
 	classifier := RealTimeStageMetrics{
 		Stage:       "classifier",
-		Processed:   trackCount,
-		Succeeded:   trackCount,
+		Processed:   messageCount,
+		Succeeded:   messageCount,
 		Failed:      0,
 		LastUpdated: trackLastUpdated,
 	}
@@ -1027,20 +1027,20 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 	// Correlator stage - same throughput (tracks are persisted after correlation)
 	correlator := RealTimeStageMetrics{
 		Stage:       "correlator",
-		Processed:   trackCount,
-		Succeeded:   trackCount,
+		Processed:   messageCount,
+		Succeeded:   messageCount,
 		Failed:      0,
 		LastUpdated: trackLastUpdated,
 	}
 	stages = append(stages, correlator)
 
-	// Planner stage - evaluates all tracks, creates proposals for some
-	// Processed = tracks evaluated, Succeeded = tracks processed, Failed = 0 (no failures)
+	// Planner stage - evaluates all messages, creates proposals for some
+	// Processed = messages evaluated, Succeeded = messages processed, Failed = 0 (no failures)
 	// Note: proposalCount is the output, not a success metric
 	planner := RealTimeStageMetrics{
 		Stage:       "planner",
-		Processed:   trackCount,
-		Succeeded:   trackCount,
+		Processed:   messageCount,
+		Succeeded:   messageCount,
 		Failed:      0,
 		LastUpdated: proposalLastUpdated,
 	}
