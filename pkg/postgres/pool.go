@@ -1034,32 +1034,34 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 	}
 	stages = append(stages, correlator)
 
-	// Planner stage - proposals created (only for tracks requiring action)
+	// Planner stage - evaluates all tracks, creates proposals for some
+	// Processed = tracks evaluated, Succeeded = tracks processed, Failed = 0 (no failures)
+	// Note: proposalCount is the output, not a success metric
 	planner := RealTimeStageMetrics{
 		Stage:       "planner",
 		Processed:   trackCount,
-		Succeeded:   proposalCount,
-		Failed:      trackCount - proposalCount, // Tracks that didn't need proposals
+		Succeeded:   trackCount,
+		Failed:      0,
 		LastUpdated: proposalLastUpdated,
 	}
 	stages = append(stages, planner)
 
-	// Authorizer stage - count proposals received (pending + decided) as processed
-	// succeeded = approved decisions, failed = denied + expired
-	var authProcessed, authSucceeded, authFailed int64
+	// Authorizer stage - receives proposals from planner
+	// Processed = proposals received (matches planner output)
+	// Succeeded = approved decisions, Failed = denied + expired, Pending = awaiting decision
+	var authSucceeded, authFailed int64
 	var authLastUpdated time.Time
 	var authP50, authP95, authP99 float64
 	err = p.QueryRow(ctx, `
 		SELECT
-			COUNT(*) as processed,
 			COALESCE(SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END), 0) as succeeded,
 			COALESCE(SUM(CASE WHEN status IN ('denied', 'expired') THEN 1 ELSE 0 END), 0) as failed,
 			COALESCE(MAX(created_at), NOW()) as last_updated
 		FROM proposals
 		WHERE created_at >= NOW() - INTERVAL '5 minutes'
-	`).Scan(&authProcessed, &authSucceeded, &authFailed, &authLastUpdated)
+	`).Scan(&authSucceeded, &authFailed, &authLastUpdated)
 	if err != nil {
-		authProcessed, authSucceeded, authFailed = 0, 0, 0
+		authSucceeded, authFailed = 0, 0
 		authLastUpdated = time.Now()
 	}
 
@@ -1082,7 +1084,7 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 
 	authorizer := RealTimeStageMetrics{
 		Stage:       "authorizer",
-		Processed:   authProcessed,
+		Processed:   proposalCount, // Use proposalCount to match planner output
 		Succeeded:   authSucceeded,
 		Failed:      authFailed,
 		LatencyP50:  authP50,
@@ -1130,7 +1132,7 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 
 	effector := RealTimeStageMetrics{
 		Stage:       "effector",
-		Processed:   effProcessed,
+		Processed:   authSucceeded, // Effector receives approved decisions from authorizer
 		Succeeded:   effSucceeded,
 		Failed:      effFailed,
 		LatencyP50:  effP50,
@@ -1143,20 +1145,21 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 	return stages, nil
 }
 
-// GetMessagesPerMinute calculates current throughput from recent track activity
+// GetMessagesPerMinute calculates current message throughput rate
 func (p *Pool) GetMessagesPerMinute(ctx context.Context) (float64, error) {
-	// Count track updates in the last minute to measure actual message throughput
+	// Sum detection_count from tracks updated in the last minute
+	// This gives the total number of detection messages processed
 	query := `
-		SELECT COUNT(*) as count
+		SELECT COALESCE(SUM(detection_count), 0) as total_detections
 		FROM tracks
 		WHERE last_updated >= NOW() - INTERVAL '1 minute'
 	`
-	var count int64
-	err := p.QueryRow(ctx, query).Scan(&count)
+	var totalDetections int64
+	err := p.QueryRow(ctx, query).Scan(&totalDetections)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get messages per minute: %w", err)
 	}
-	return float64(count), nil
+	return float64(totalDetections), nil
 }
 
 // GetEndToEndLatencyMetrics returns real-time E2E latency percentiles
