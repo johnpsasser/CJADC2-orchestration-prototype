@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import clsx from 'clsx';
-import type { CorrelatedTrack, ThreatLevel, SortConfig, ActionProposal, ActionType } from '../types';
+import type { CorrelatedTrack, ThreatLevel, SortConfig } from '../types';
 
 interface TrackTableProps {
   tracks: CorrelatedTrack[];
@@ -10,7 +10,6 @@ interface TrackTableProps {
   onSelectTrack: (trackId: string | null) => void;
   onSort: (key: string) => void;
   isLoading?: boolean;
-  proposals?: ActionProposal[];
 }
 
 // Threat level color mapping
@@ -53,23 +52,12 @@ const classificationColors: Record<string, string> = {
   unknown: 'bg-gray-700 text-gray-300',
 };
 
-// Action type colors
-const actionTypeColors: Record<ActionType, { bg: string; text: string }> = {
-  engage: { bg: 'bg-red-900/50', text: 'text-red-400' },
-  intercept: { bg: 'bg-orange-900/50', text: 'text-orange-400' },
-  track: { bg: 'bg-blue-900/50', text: 'text-blue-400' },
-  identify: { bg: 'bg-purple-900/50', text: 'text-purple-400' },
-  monitor: { bg: 'bg-cyan-900/50', text: 'text-cyan-400' },
-  ignore: { bg: 'bg-gray-800/50', text: 'text-gray-500' },
-};
-
 // Column definitions
 const columns = [
   { key: 'track_id', label: 'Track ID', sortable: true },
   { key: 'classification', label: 'Classification', sortable: true },
   { key: 'type', label: 'Type', sortable: true },
   { key: 'threat_level', label: 'Threat', sortable: true },
-  { key: 'action_type', label: 'Action', sortable: false },
   { key: 'position', label: 'Position', sortable: false },
   { key: 'velocity', label: 'Velocity', sortable: false },
   { key: 'confidence', label: 'Confidence', sortable: true },
@@ -83,18 +71,7 @@ export function TrackTable({
   onSelectTrack,
   onSort,
   isLoading = false,
-  proposals = [],
 }: TrackTableProps) {
-  // Build a map of track_id -> action_type from pending proposals
-  const trackActionMap = useMemo(() => {
-    const map = new Map<string, ActionType>();
-    for (const proposal of proposals) {
-      if (proposal.status === 'pending' || !proposal.status) {
-        map.set(proposal.track_id, proposal.action_type);
-      }
-    }
-    return map;
-  }, [proposals]);
   // Format position for display
   const formatPosition = useCallback((pos: CorrelatedTrack['position'] | undefined) => {
     if (!pos || typeof pos.lat !== 'number' || typeof pos.lon !== 'number') {
@@ -301,21 +278,6 @@ export function TrackTable({
                     >
                       {(track.threat_level || 'unknown').toUpperCase()}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {trackActionMap.has(track.track_id) ? (
-                      <span
-                        className={clsx(
-                          'px-2 py-1 text-xs font-medium rounded',
-                          actionTypeColors[trackActionMap.get(track.track_id)!].bg,
-                          actionTypeColors[trackActionMap.get(track.track_id)!].text
-                        )}
-                      >
-                        {trackActionMap.get(track.track_id)!.toUpperCase()}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-600">-</span>
-                    )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className="font-mono text-xs text-gray-400">

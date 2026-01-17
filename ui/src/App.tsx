@@ -303,7 +303,6 @@ function DashboardContent() {
                   onSelectTrack={selectTrack}
                   onSort={toggleSort}
                   isLoading={tracksLoading}
-                  proposals={proposals}
                 />
               </div>
               {selectedTrack && (
