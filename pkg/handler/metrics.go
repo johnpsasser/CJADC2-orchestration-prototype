@@ -230,7 +230,7 @@ type SystemMetricsResponse struct {
 	EndToEndLatencyP50Ms    float64                `json:"end_to_end_latency_p50_ms"`
 	EndToEndLatencyP95Ms    float64                `json:"end_to_end_latency_p95_ms"`
 	EndToEndLatencyP99Ms    float64                `json:"end_to_end_latency_p99_ms"`
-	MessagesPerMinute       float64                `json:"messages_per_minute"`
+	MessagesPerMinute       int64                  `json:"messages_per_minute"`
 	UniqueMessagesProcessed int64                  `json:"unique_messages_processed"`
 	QueueDepth              int64                  `json:"queue_depth"`
 	ActiveTracks            int64                  `json:"active_tracks"`
@@ -334,7 +334,7 @@ func (h *MetricsHandler) GetCurrentMetrics(w http.ResponseWriter, r *http.Reques
 		EndToEndLatencyP50Ms:    e2eP50,
 		EndToEndLatencyP95Ms:    e2eP95,
 		EndToEndLatencyP99Ms:    e2eP99,
-		MessagesPerMinute:       messagesPerMinute,
+		MessagesPerMinute:       int64(messagesPerMinute + 0.5),
 		UniqueMessagesProcessed: uniqueMessagesProcessed,
 		QueueDepth:              queueDepth,
 		ActiveTracks:            activeTracks,
