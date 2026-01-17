@@ -125,6 +125,8 @@ services:
       dockerfile: build/Dockerfile.agent
       args:
         AGENT_TYPE: classifier
+    ports:
+      - "9092:9090"  # Classifier control API
     environment:
       AGENT_ID: classifier-001
       AGENT_TYPE: classifier

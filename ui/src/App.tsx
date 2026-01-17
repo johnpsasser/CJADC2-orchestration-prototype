@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import clsx from 'clsx';
 
@@ -13,6 +13,7 @@ import { MetricsDashboard } from './components/MetricsDashboard';
 import { AuditTrail } from './components/AuditTrail';
 import { SensorControlPage } from './pages/SensorControlPage';
 import { sensorApi } from './api/sensor';
+import { classifierApi } from './api/classifier';
 import { api } from './api/client';
 import type { ConnectionStatus, SystemMetrics } from './types';
 
@@ -172,6 +173,21 @@ function DashboardContent() {
     },
     refetchInterval: 5000,
     staleTime: 3000,
+  });
+
+  // Fetch classifier config for processing pause control
+  const { data: classifierConfig, refetch: refetchClassifierConfig } = useQuery({
+    queryKey: ['classifierConfig'],
+    queryFn: classifierApi.getConfig,
+    refetchInterval: 2000,
+  });
+
+  // Mutation to toggle classifier processing pause
+  const toggleProcessingMutation = useMutation({
+    mutationFn: (paused: boolean) => classifierApi.updateConfig({ paused }),
+    onSuccess: () => {
+      refetchClassifierConfig();
+    },
   });
 
   // Track hooks
@@ -344,6 +360,19 @@ function DashboardContent() {
                 <span className="text-gray-500">Processed:</span>
                 <span className="text-gray-300 font-mono">{systemMetrics?.unique_messages_processed?.toLocaleString() ?? 0}</span>
               </div>
+
+              {/* Processing pause control */}
+              <button
+                onClick={() => toggleProcessingMutation.mutate(!classifierConfig?.paused)}
+                disabled={toggleProcessingMutation.isPending}
+                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+                  classifierConfig?.paused
+                    ? 'bg-yellow-600 hover:bg-yellow-500 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+              >
+                {classifierConfig?.paused ? 'Resume Processing' : 'Pause Processing'}
+              </button>
 
               {/* Real-time indicator */}
               <LiveIndicator connected={status === 'connected'} paused={sensorConfig?.paused ?? false} />

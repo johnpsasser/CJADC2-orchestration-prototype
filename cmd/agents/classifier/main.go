@@ -9,12 +9,15 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/agile-defense/cjadc2/pkg/agent"
 	"github.com/agile-defense/cjadc2/pkg/messages"
 	natsutil "github.com/agile-defense/cjadc2/pkg/nats"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -26,6 +29,10 @@ type ClassifierAgent struct {
 	*agent.BaseAgent
 	logger   zerolog.Logger
 	consumer jetstream.Consumer
+
+	// Pause control
+	mu     sync.RWMutex
+	paused bool
 }
 
 // NewClassifierAgent creates a new classifier agent
@@ -75,10 +82,34 @@ func (a *ClassifierAgent) consumeMessages(ctx context.Context) error {
 		default:
 		}
 
+		// Check if paused
+		a.mu.RLock()
+		paused := a.paused
+		a.mu.RUnlock()
+		if paused {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
 		// Fetch messages with timeout
 		msgs, err := a.consumer.Fetch(10, jetstream.FetchMaxWait(5*time.Second))
 		if err != nil {
 			if err == context.DeadlineExceeded || err == context.Canceled {
+				continue
+			}
+			// Check if consumer was deleted and needs to be recreated
+			errStr := err.Error()
+			if strings.Contains(errStr, "no responders") || strings.Contains(errStr, "consumer not found") || strings.Contains(errStr, "consumer deleted") {
+				a.logger.Warn().Err(err).Msg("Consumer was deleted, recreating...")
+				consumer, recreateErr := natsutil.SetupConsumer(ctx, a.JetStream(), "DETECTIONS", "classifier")
+				if recreateErr != nil {
+					a.logger.Error().Err(recreateErr).Msg("Failed to recreate consumer")
+					a.RecordError("consumer_recreate_error")
+					time.Sleep(time.Second)
+					continue
+				}
+				a.consumer = consumer
+				a.logger.Info().Msg("Consumer recreated successfully")
 				continue
 			}
 			a.logger.Error().Err(err).Msg("Failed to fetch messages")
@@ -98,6 +129,20 @@ func (a *ClassifierAgent) consumeMessages(ctx context.Context) error {
 		}
 
 		if msgs.Error() != nil && msgs.Error() != context.DeadlineExceeded {
+			errStr := msgs.Error().Error()
+			// Check if consumer was deleted and needs to be recreated
+			if strings.Contains(errStr, "no responders") || strings.Contains(errStr, "consumer not found") || strings.Contains(errStr, "consumer deleted") {
+				a.logger.Warn().Err(msgs.Error()).Msg("Consumer was deleted (batch error), recreating...")
+				consumer, recreateErr := natsutil.SetupConsumer(ctx, a.JetStream(), "DETECTIONS", "classifier")
+				if recreateErr != nil {
+					a.logger.Error().Err(recreateErr).Msg("Failed to recreate consumer")
+					a.RecordError("consumer_recreate_error")
+				} else {
+					a.consumer = consumer
+					a.logger.Info().Msg("Consumer recreated successfully")
+				}
+				continue
+			}
 			a.logger.Warn().Err(msgs.Error()).Msg("Message batch error")
 		}
 	}
@@ -122,8 +167,17 @@ func (a *ClassifierAgent) processMessage(ctx context.Context, msg jetstream.Msg)
 		Str("correlation_id", correlationID).
 		Str("track_id", detection.TrackID).
 		Str("sensor_type", detection.SensorType).
+		Str("detection_type", detection.Type).
 		Float64("confidence", detection.Confidence).
 		Msg("Processing detection")
+
+	// Debug log for missile types
+	if detection.Type == "missile" {
+		a.logger.Info().
+			Str("track_id", detection.TrackID).
+			Str("detection_type", detection.Type).
+			Msg("Received missile detection from sensor")
+	}
 
 	// Create track from detection
 	track := messages.NewTrack(&detection, a.ID())
@@ -307,6 +361,79 @@ func (a *ClassifierAgent) adjustConfidence(originalConfidence float64, classific
 	}
 }
 
+// SetPaused sets the paused state
+func (a *ClassifierAgent) SetPaused(paused bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.paused = paused
+	a.logger.Info().Bool("paused", paused).Msg("Updated paused state")
+}
+
+// IsPaused returns the current paused state
+func (a *ClassifierAgent) IsPaused() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.paused
+}
+
+// startHTTPServer starts the HTTP server for control API
+func (a *ClassifierAgent) startHTTPServer() {
+	r := chi.NewRouter()
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+	}))
+
+	r.Handle("/metrics", promhttp.HandlerFor(a.Metrics(), promhttp.HandlerOpts{}))
+	r.Get("/health", a.handleHealth)
+	r.Get("/api/v1/config", a.handleGetConfig)
+	r.Patch("/api/v1/config", a.handlePatchConfig)
+
+	a.logger.Info().Msg("Starting HTTP server on :9090")
+	if err := http.ListenAndServe(":9090", r); err != nil {
+		a.logger.Error().Err(err).Msg("HTTP server error")
+	}
+}
+
+func (a *ClassifierAgent) handleHealth(w http.ResponseWriter, r *http.Request) {
+	health := a.Health()
+	w.Header().Set("Content-Type", "application/json")
+	if health.Healthy {
+		w.WriteHeader(http.StatusOK)
+	} else {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	json.NewEncoder(w).Encode(health)
+}
+
+func (a *ClassifierAgent) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	config := map[string]interface{}{
+		"paused": a.IsPaused(),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+func (a *ClassifierAgent) handlePatchConfig(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Paused *bool `json:"paused"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	if req.Paused != nil {
+		a.SetPaused(*req.Paused)
+	}
+
+	// Return updated config
+	a.handleGetConfig(w, r)
+}
+
 func main() {
 	// Configuration from environment
 	cfg := agent.Config{
@@ -332,25 +459,8 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start metrics server
-	go func() {
-		metricsAddr := getEnv("METRICS_ADDR", ":9090")
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttp.HandlerFor(classifier.Metrics(), promhttp.HandlerOpts{}))
-		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-			health := classifier.Health()
-			if health.Healthy {
-				w.WriteHeader(http.StatusOK)
-			} else {
-				w.WriteHeader(http.StatusServiceUnavailable)
-			}
-			json.NewEncoder(w).Encode(health)
-		})
-		classifier.logger.Info().Str("addr", metricsAddr).Msg("Starting metrics server")
-		if err := http.ListenAndServe(metricsAddr, mux); err != nil {
-			classifier.logger.Error().Err(err).Msg("Metrics server error")
-		}
-	}()
+	// Start HTTP server for control API
+	go classifier.startHTTPServer()
 
 	// Run agent
 	go func() {

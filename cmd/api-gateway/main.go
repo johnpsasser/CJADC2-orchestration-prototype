@@ -339,6 +339,11 @@ func setupRouter(cfg Config, db *postgres.Pool, nc *nats.Conn, opaClient *opa.Cl
 		auditHandler := handler.NewAuditHandler(db, log.Logger)
 		r.Mount("/audit", auditHandler.Routes())
 
+		// Classifier handler
+		classifierURL := getEnv("CLASSIFIER_URL", "http://classifier:9090")
+		classifierHandler := handler.NewClassifierHandler(classifierURL, log.Logger)
+		r.Mount("/classifier", classifierHandler.Routes())
+
 		// Clear all data endpoint
 		r.Post("/clear", clearHandler(db))
 	})
