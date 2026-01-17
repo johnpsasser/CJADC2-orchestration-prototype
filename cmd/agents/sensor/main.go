@@ -37,6 +37,12 @@ const (
 
 	DefaultEmissionInterval = 500 * time.Millisecond
 	DefaultTrackCount       = 10
+
+	// Track lifecycle defaults
+	DefaultLifecycleEnabled       = true
+	DefaultLifecycleIntervalSec   = 15  // Check every 15 seconds
+	DefaultLifecycleChancePercent = 10  // 10% chance per interval for a track to be replaced
+	DefaultReplaceOnDecision      = true // Replace tracks when engage/intercept approved
 )
 
 // Default type weights (must sum to 100 for percentage-based selection)
@@ -73,16 +79,26 @@ type SensorConfig struct {
 	paused                bool
 	typeWeights           map[string]int
 	classificationWeights map[string]int
+
+	// Track lifecycle configuration
+	lifecycleEnabled       bool // Enable random track retirement/replacement
+	lifecycleIntervalSec   int  // How often to check for lifecycle events
+	lifecycleChancePercent int  // % chance per interval for a track to be replaced
+	replaceOnDecision      bool // Replace tracks when engage/intercept approved
 }
 
 // NewSensorConfig creates a new SensorConfig with default values
 func NewSensorConfig() *SensorConfig {
 	return &SensorConfig{
-		emissionInterval:      DefaultEmissionInterval,
-		trackCount:            DefaultTrackCount,
-		paused:                false,
-		typeWeights:           copyWeights(DefaultTypeWeights),
-		classificationWeights: copyWeights(DefaultClassificationWeights),
+		emissionInterval:       DefaultEmissionInterval,
+		trackCount:             DefaultTrackCount,
+		paused:                 false,
+		typeWeights:            copyWeights(DefaultTypeWeights),
+		classificationWeights:  copyWeights(DefaultClassificationWeights),
+		lifecycleEnabled:       DefaultLifecycleEnabled,
+		lifecycleIntervalSec:   DefaultLifecycleIntervalSec,
+		lifecycleChancePercent: DefaultLifecycleChancePercent,
+		replaceOnDecision:      DefaultReplaceOnDecision,
 	}
 }
 
@@ -219,6 +235,49 @@ func (c *SensorConfig) SetClassificationWeights(weights map[string]int) error {
 	return nil
 }
 
+// GetLifecycleConfig returns lifecycle configuration
+func (c *SensorConfig) GetLifecycleConfig() (enabled bool, intervalSec, chancePercent int, replaceOnDecision bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.lifecycleEnabled, c.lifecycleIntervalSec, c.lifecycleChancePercent, c.replaceOnDecision
+}
+
+// SetLifecycleEnabled enables/disables random track lifecycle
+func (c *SensorConfig) SetLifecycleEnabled(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lifecycleEnabled = enabled
+}
+
+// SetLifecycleInterval sets the lifecycle check interval in seconds
+func (c *SensorConfig) SetLifecycleInterval(intervalSec int) error {
+	if intervalSec < 5 || intervalSec > 300 {
+		return fmt.Errorf("lifecycle_interval_sec must be between 5 and 300")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lifecycleIntervalSec = intervalSec
+	return nil
+}
+
+// SetLifecycleChance sets the % chance per interval for track replacement
+func (c *SensorConfig) SetLifecycleChance(chancePercent int) error {
+	if chancePercent < 0 || chancePercent > 100 {
+		return fmt.Errorf("lifecycle_chance_percent must be between 0 and 100")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lifecycleChancePercent = chancePercent
+	return nil
+}
+
+// SetReplaceOnDecision enables/disables track replacement on kinetic decisions
+func (c *SensorConfig) SetReplaceOnDecision(enabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.replaceOnDecision = enabled
+}
+
 // Reset resets configuration to default values
 func (c *SensorConfig) Reset() {
 	c.mu.Lock()
@@ -228,6 +287,10 @@ func (c *SensorConfig) Reset() {
 	c.paused = false
 	c.typeWeights = copyWeights(DefaultTypeWeights)
 	c.classificationWeights = copyWeights(DefaultClassificationWeights)
+	c.lifecycleEnabled = DefaultLifecycleEnabled
+	c.lifecycleIntervalSec = DefaultLifecycleIntervalSec
+	c.lifecycleChancePercent = DefaultLifecycleChancePercent
+	c.replaceOnDecision = DefaultReplaceOnDecision
 }
 
 // Snapshot returns a copy of the current configuration
@@ -246,21 +309,29 @@ func (c *SensorConfig) FullSnapshot() (emissionInterval time.Duration, trackCoun
 
 // ConfigResponse represents the JSON response for configuration
 type ConfigResponse struct {
-	EmissionIntervalMS    int64          `json:"emission_interval_ms"`
-	TrackCount            int            `json:"track_count"`
-	Paused                bool           `json:"paused"`
-	TypeWeights           map[string]int `json:"type_weights"`
-	ClassificationWeights map[string]int `json:"classification_weights"`
+	EmissionIntervalMS     int64          `json:"emission_interval_ms"`
+	TrackCount             int            `json:"track_count"`
+	Paused                 bool           `json:"paused"`
+	TypeWeights            map[string]int `json:"type_weights"`
+	ClassificationWeights  map[string]int `json:"classification_weights"`
+	LifecycleEnabled       bool           `json:"lifecycle_enabled"`
+	LifecycleIntervalSec   int            `json:"lifecycle_interval_sec"`
+	LifecycleChancePercent int            `json:"lifecycle_chance_percent"`
+	ReplaceOnDecision      bool           `json:"replace_on_decision"`
 }
 
 // ConfigUpdateRequest represents a partial configuration update request
 type ConfigUpdateRequest struct {
-	EmissionIntervalMS    *int64          `json:"emission_interval_ms,omitempty"`
-	TrackCount            *int            `json:"track_count,omitempty"`
-	Paused                *bool           `json:"paused,omitempty"`
-	TypeWeights           *map[string]int `json:"type_weights,omitempty"`
-	ClassificationWeights *map[string]int `json:"classification_weights,omitempty"`
-	ClearStreams          *bool           `json:"clear_streams,omitempty"` // Action: purge NATS streams when true
+	EmissionIntervalMS     *int64          `json:"emission_interval_ms,omitempty"`
+	TrackCount             *int            `json:"track_count,omitempty"`
+	Paused                 *bool           `json:"paused,omitempty"`
+	TypeWeights            *map[string]int `json:"type_weights,omitempty"`
+	ClassificationWeights  *map[string]int `json:"classification_weights,omitempty"`
+	ClearStreams           *bool           `json:"clear_streams,omitempty"` // Action: purge NATS streams when true
+	LifecycleEnabled       *bool           `json:"lifecycle_enabled,omitempty"`
+	LifecycleIntervalSec   *int            `json:"lifecycle_interval_sec,omitempty"`
+	LifecycleChancePercent *int            `json:"lifecycle_chance_percent,omitempty"`
+	ReplaceOnDecision      *bool           `json:"replace_on_decision,omitempty"`
 }
 
 // SensorAgent generates synthetic detection events
@@ -274,8 +345,12 @@ type SensorAgent struct {
 	db *postgres.Pool
 
 	// Simulated tracks
-	tracksMu sync.RWMutex
-	tracks   map[string]*simulatedTrack
+	tracksMu     sync.RWMutex
+	tracks       map[string]*simulatedTrack
+	trackCounter int // Counter for generating unique track IDs
+
+	// Decision consumer for track lifecycle
+	decisionConsumer jetstream.Consumer
 }
 
 type simulatedTrack struct {
@@ -305,7 +380,7 @@ func main() {
 	defer cancel()
 
 	// Initialize database connection (optional - sensor continues without it)
-	postgresURL := getEnv("POSTGRES_URL", "postgres://cjadc2:cjadc2@localhost:5432/cjadc2?sslmode=disable")
+	postgresURL := getEnv("POSTGRES_URL", "postgres://cjadc2:devpassword@localhost:5432/cjadc2?sslmode=disable")
 	dbCtx, dbCancel := context.WithTimeout(ctx, 5*time.Second)
 	db, err := postgres.NewPoolFromURL(dbCtx, postgresURL)
 	dbCancel()
@@ -434,13 +509,18 @@ func (s *SensorAgent) handleHealth(w http.ResponseWriter, r *http.Request) {
 // handleGetConfig handles GET /api/v1/config
 func (s *SensorAgent) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	interval, trackCount, paused, typeWeights, classificationWeights := s.config.FullSnapshot()
+	lifecycleEnabled, lifecycleIntervalSec, lifecycleChancePercent, replaceOnDecision := s.config.GetLifecycleConfig()
 
 	response := ConfigResponse{
-		EmissionIntervalMS:    interval.Milliseconds(),
-		TrackCount:            trackCount,
-		Paused:                paused,
-		TypeWeights:           typeWeights,
-		ClassificationWeights: classificationWeights,
+		EmissionIntervalMS:     interval.Milliseconds(),
+		TrackCount:             trackCount,
+		Paused:                 paused,
+		TypeWeights:            typeWeights,
+		ClassificationWeights:  classificationWeights,
+		LifecycleEnabled:       lifecycleEnabled,
+		LifecycleIntervalSec:   lifecycleIntervalSec,
+		LifecycleChancePercent: lifecycleChancePercent,
+		ReplaceOnDecision:      replaceOnDecision,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -502,6 +582,33 @@ func (s *SensorAgent) handlePatchConfig(w http.ResponseWriter, r *http.Request) 
 		}
 		weightsChanged = true
 		s.Logger().Info().Interface("classification_weights", *req.ClassificationWeights).Msg("Updated classification weights")
+	}
+
+	// Handle lifecycle configuration updates
+	if req.LifecycleEnabled != nil {
+		s.config.SetLifecycleEnabled(*req.LifecycleEnabled)
+		s.Logger().Info().Bool("lifecycle_enabled", *req.LifecycleEnabled).Msg("Updated lifecycle enabled")
+	}
+
+	if req.LifecycleIntervalSec != nil {
+		if err := s.config.SetLifecycleInterval(*req.LifecycleIntervalSec); err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.Logger().Info().Int("lifecycle_interval_sec", *req.LifecycleIntervalSec).Msg("Updated lifecycle interval")
+	}
+
+	if req.LifecycleChancePercent != nil {
+		if err := s.config.SetLifecycleChance(*req.LifecycleChancePercent); err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.Logger().Info().Int("lifecycle_chance_percent", *req.LifecycleChancePercent).Msg("Updated lifecycle chance")
+	}
+
+	if req.ReplaceOnDecision != nil {
+		s.config.SetReplaceOnDecision(*req.ReplaceOnDecision)
+		s.Logger().Info().Bool("replace_on_decision", *req.ReplaceOnDecision).Msg("Updated replace on decision")
 	}
 
 	// Regenerate all tracks if weights changed (to apply new type/classification distribution)
@@ -617,7 +724,9 @@ func (s *SensorAgent) reinitializeTracks(count int) {
 	defer s.tracksMu.Unlock()
 
 	s.tracks = make(map[string]*simulatedTrack)
+	s.trackCounter = 0 // Reset counter on reinitialization
 	s.initializeTracksLocked(count)
+	s.trackCounter = count // Set counter to current count for future additions
 
 	// Log summary of track types generated
 	typeCounts := make(map[string]int)
@@ -635,6 +744,7 @@ func (s *SensorAgent) initializeTracks(count int) {
 	s.tracksMu.Lock()
 	defer s.tracksMu.Unlock()
 	s.initializeTracksLocked(count)
+	s.trackCounter = count // Set counter to current count for future additions
 
 	// Log summary of track types generated
 	typeCounts := make(map[string]int)
@@ -811,12 +921,23 @@ func (s *SensorAgent) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to setup streams: %w", err)
 	}
 
+	// Start decision subscription for track replacement on kinetic actions
+	go s.subscribeToDecisions(ctx)
+
+	// Start random lifecycle loop for track retirement/replacement
+	go s.lifecycleLoop(ctx)
+
 	interval, trackCount, paused := s.config.Snapshot()
+	lifecycleEnabled, lifecycleIntervalSec, lifecycleChancePercent, replaceOnDecision := s.config.GetLifecycleConfig()
 	s.Logger().Info().
 		Dur("interval", interval).
 		Int("track_count", trackCount).
 		Bool("paused", paused).
-		Msg("Starting sensor simulation")
+		Bool("lifecycle_enabled", lifecycleEnabled).
+		Int("lifecycle_interval_sec", lifecycleIntervalSec).
+		Int("lifecycle_chance_percent", lifecycleChancePercent).
+		Bool("replace_on_decision", replaceOnDecision).
+		Msg("Starting sensor simulation with track lifecycle")
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -983,6 +1104,231 @@ func (s *SensorAgent) publishDetection(ctx context.Context, det *messages.Detect
 		Msg("Published detection")
 
 	return nil
+}
+
+// subscribeToDecisions subscribes to the DECISIONS stream to replace tracks on kinetic actions
+func (s *SensorAgent) subscribeToDecisions(ctx context.Context) {
+	// Create consumer for decisions
+	consumer, err := natsutil.SetupConsumer(ctx, s.JetStream(), "DECISIONS", "sensor-lifecycle")
+	if err != nil {
+		s.Logger().Error().Err(err).Msg("Failed to setup decision consumer for lifecycle")
+		return
+	}
+	s.decisionConsumer = consumer
+
+	s.Logger().Info().Msg("Started decision subscription for track lifecycle")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Check if replace on decision is enabled
+		_, _, _, replaceOnDecision := s.config.GetLifecycleConfig()
+		if !replaceOnDecision {
+			time.Sleep(time.Second)
+			continue
+		}
+
+		// Fetch messages with timeout
+		msgs, err := consumer.Fetch(10, jetstream.FetchMaxWait(5*time.Second))
+		if err != nil {
+			if err != context.DeadlineExceeded && err != context.Canceled {
+				s.Logger().Debug().Err(err).Msg("Decision fetch timeout or error")
+			}
+			continue
+		}
+
+		for msg := range msgs.Messages() {
+			s.handleDecision(ctx, msg)
+		}
+	}
+}
+
+// handleDecision processes a decision and replaces the track if it's a kinetic action
+func (s *SensorAgent) handleDecision(ctx context.Context, msg jetstream.Msg) {
+	var decision messages.Decision
+	if err := json.Unmarshal(msg.Data(), &decision); err != nil {
+		s.Logger().Error().Err(err).Msg("Failed to unmarshal decision")
+		msg.Ack()
+		return
+	}
+
+	// Only replace tracks for approved kinetic actions
+	if !decision.Approved {
+		msg.Ack()
+		return
+	}
+
+	// Check if this is a kinetic action (engage or intercept)
+	actionType := decision.ActionType
+	if actionType != "engage" && actionType != "intercept" {
+		msg.Ack()
+		return
+	}
+
+	trackID := decision.TrackID
+
+	s.Logger().Info().
+		Str("track_id", trackID).
+		Str("action_type", actionType).
+		Str("decision_id", decision.DecisionID).
+		Msg("Kinetic action approved - replacing track")
+
+	// Replace the track with a new one
+	s.replaceTrack(trackID)
+
+	msg.Ack()
+}
+
+// lifecycleLoop periodically retires and replaces tracks randomly
+func (s *SensorAgent) lifecycleLoop(ctx context.Context) {
+	// Initial delay to let tracks settle
+	time.Sleep(5 * time.Second)
+
+	for {
+		// Get current lifecycle config
+		enabled, intervalSec, chancePercent, _ := s.config.GetLifecycleConfig()
+
+		if !enabled {
+			// Check again in a few seconds if lifecycle becomes enabled
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Second):
+				continue
+			}
+		}
+
+		// Wait for the lifecycle interval
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Duration(intervalSec) * time.Second):
+		}
+
+		// Skip if paused
+		if s.config.IsPaused() {
+			continue
+		}
+
+		// Get track IDs with pending proposals (don't replace these)
+		pendingTrackIDs := s.getTracksWithPendingProposals(ctx)
+
+		// Get list of track IDs
+		s.tracksMu.RLock()
+		trackIDs := make([]string, 0, len(s.tracks))
+		for id := range s.tracks {
+			trackIDs = append(trackIDs, id)
+		}
+		s.tracksMu.RUnlock()
+
+		// Check each track for retirement
+		replacedCount := 0
+		skippedCount := 0
+		for _, trackID := range trackIDs {
+			// Skip tracks with pending proposals - keep tracking until decision is made
+			if pendingTrackIDs[trackID] {
+				skippedCount++
+				continue
+			}
+
+			if rand.Intn(100) < chancePercent {
+				s.Logger().Info().
+					Str("track_id", trackID).
+					Int("chance_percent", chancePercent).
+					Msg("Track retired (random lifecycle) - replacing with new track")
+
+				s.replaceTrack(trackID)
+				replacedCount++
+			}
+		}
+
+		if replacedCount > 0 || skippedCount > 0 {
+			s.Logger().Info().
+				Int("replaced_count", replacedCount).
+				Int("skipped_pending", skippedCount).
+				Int("total_tracks", len(trackIDs)).
+				Msg("Lifecycle check completed")
+		}
+	}
+}
+
+// getTracksWithPendingProposals queries the database for track IDs that have pending proposals
+func (s *SensorAgent) getTracksWithPendingProposals(ctx context.Context) map[string]bool {
+	pendingTracks := make(map[string]bool)
+
+	if s.db == nil {
+		return pendingTracks
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	rows, err := s.db.Query(queryCtx, "SELECT DISTINCT track_id FROM proposals WHERE status = 'pending'")
+	if err != nil {
+		s.Logger().Warn().Err(err).Msg("Failed to query pending proposals for lifecycle check")
+		return pendingTracks
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var trackID string
+		if err := rows.Scan(&trackID); err != nil {
+			continue
+		}
+		pendingTracks[trackID] = true
+	}
+
+	return pendingTracks
+}
+
+// replaceTrack removes a track and creates a new one in its place
+func (s *SensorAgent) replaceTrack(trackID string) {
+	s.tracksMu.Lock()
+	defer s.tracksMu.Unlock()
+
+	// Check if track exists
+	oldTrack, exists := s.tracks[trackID]
+	if !exists {
+		s.Logger().Warn().Str("track_id", trackID).Msg("Track not found for replacement")
+		return
+	}
+
+	oldTrackType := oldTrack.trackType
+
+	// Get existing track IDs before adding new one
+	existingIDs := make(map[string]bool)
+	for id := range s.tracks {
+		existingIDs[id] = true
+	}
+
+	// Remove old track
+	delete(s.tracks, trackID)
+
+	// Increment counter and add new track
+	s.trackCounter++
+	s.addSingleTrackLocked(s.trackCounter)
+
+	// Find the new track by comparing IDs
+	var newTrackID string
+	var newTrackType string
+	for id, track := range s.tracks {
+		if !existingIDs[id] {
+			newTrackID = id
+			newTrackType = track.trackType
+			break
+		}
+	}
+
+	s.Logger().Info().
+		Str("old_track_id", trackID).
+		Str("old_track_type", oldTrackType).
+		Str("new_track_id", newTrackID).
+		Str("new_track_type", newTrackType).
+		Msg("Track replaced")
 }
 
 func getEnv(key, defaultVal string) string {

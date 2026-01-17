@@ -133,6 +133,11 @@ services:
       NATS_URL: nats://nats:4222
       OPA_URL: http://opa:8181
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     depends_on:
       nats:
         condition: service_healthy
@@ -155,6 +160,11 @@ services:
       OPA_URL: http://opa:8181
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       CORRELATION_WINDOW: 10s
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     depends_on:
       nats:
         condition: service_healthy
@@ -176,6 +186,11 @@ services:
       NATS_URL: nats://nats:4222
       OPA_URL: http://opa:8181
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     depends_on:
       nats:
         condition: service_healthy
@@ -198,6 +213,11 @@ services:
       OPA_URL: http://opa:8181
       DATABASE_URL: postgres://cjadc2:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/cjadc2?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     depends_on:
       nats:
         condition: service_healthy
@@ -222,6 +242,11 @@ services:
       OPA_URL: http://opa:8181
       DATABASE_URL: postgres://cjadc2:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/cjadc2?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     depends_on:
       nats:
         condition: service_healthy
@@ -246,6 +271,11 @@ services:
       OPA_URL: http://opa:8181
       POSTGRES_URL: postgres://cjadc2:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/cjadc2?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
     depends_on:
       nats:
         condition: service_healthy
@@ -269,7 +299,8 @@ services:
       VITE_API_URL: http://localhost:8080/api/v1
       VITE_WS_URL: ws://localhost:8080/ws
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     networks:
       - cjadc2
 

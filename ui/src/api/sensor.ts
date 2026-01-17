@@ -10,6 +10,12 @@ export interface SensorConfig {
   classification_weights?: ClassificationWeights;
 }
 
+// Response type for clear streams operation
+export interface ClearStreamsResponse {
+  cleared: boolean;
+  message: string;
+}
+
 // Sensor API base URL (sensor-sim is exposed on port 9091)
 const SENSOR_API_BASE_URL = import.meta.env.VITE_SENSOR_API_URL || 'http://localhost:9091';
 
@@ -133,6 +139,18 @@ export const sensorApi = {
       {
         method: 'PATCH',
         body: JSON.stringify({ paused: false }),
+      },
+      correlationId
+    );
+  },
+
+  // Clear message queue/streams (discards all pending messages in the pipeline)
+  clearStreams: async (correlationId?: string): Promise<{ data: ClearStreamsResponse; correlationId: string }> => {
+    return sensorFetch<ClearStreamsResponse>(
+      '/api/v1/config',
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ clear_streams: true }),
       },
       correlationId
     );

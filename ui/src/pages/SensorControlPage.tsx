@@ -341,19 +341,44 @@ function adjustTypeWeightsProportionally(
   }
 
   // Round values to integers while maintaining sum of 100
+  // Use floor rounding first, then distribute remainder to preserve non-zero values
   let remainingTotal = targetOtherTotal;
   const result: TrackTypeWeights = { ...weights, [changedKey]: clampedNewValue };
 
-  for (let i = 0; i < proportionalValues.length; i++) {
-    const { key, value } = proportionalValues[i];
-    if (i === proportionalValues.length - 1) {
-      // Last item gets the remainder to ensure sum is exactly 100
-      result[key] = Math.max(0, remainingTotal);
-    } else {
-      const rounded = Math.round(value);
-      result[key] = rounded;
-      remainingTotal -= rounded;
-    }
+  // First pass: floor all values and track which had non-zero original values
+  const flooredValues: { key: keyof TrackTypeWeights; floored: number; hadValue: boolean; fractional: number }[] = [];
+  for (const { key, value } of proportionalValues) {
+    const floored = Math.floor(value);
+    flooredValues.push({
+      key,
+      floored,
+      hadValue: weights[key] > 0,
+      fractional: value - floored,
+    });
+    remainingTotal -= floored;
+  }
+
+  // Second pass: distribute remainder, prioritizing items that had original values but got floored to 0
+  // Sort by: 1) had value but floored to 0, 2) highest fractional part
+  const sortedForRemainder = [...flooredValues].sort((a, b) => {
+    // Prioritize items that had a value but were floored to 0
+    const aNeeds = a.hadValue && a.floored === 0 ? 1 : 0;
+    const bNeeds = b.hadValue && b.floored === 0 ? 1 : 0;
+    if (aNeeds !== bNeeds) return bNeeds - aNeeds;
+    // Then sort by fractional part (highest first)
+    return b.fractional - a.fractional;
+  });
+
+  // Assign floored values and distribute remainder
+  for (const { key, floored } of flooredValues) {
+    result[key] = floored;
+  }
+
+  // Distribute remaining points
+  for (const { key } of sortedForRemainder) {
+    if (remainingTotal <= 0) break;
+    result[key] += 1;
+    remainingTotal -= 1;
   }
 
   return result;
@@ -399,19 +424,44 @@ function adjustClassificationWeightsProportionally(
   }
 
   // Round values to integers while maintaining sum of 100
+  // Use floor rounding first, then distribute remainder to preserve non-zero values
   let remainingTotal = targetOtherTotal;
   const result: ClassificationWeights = { ...weights, [changedKey]: clampedNewValue };
 
-  for (let i = 0; i < proportionalValues.length; i++) {
-    const { key, value } = proportionalValues[i];
-    if (i === proportionalValues.length - 1) {
-      // Last item gets the remainder to ensure sum is exactly 100
-      result[key] = Math.max(0, remainingTotal);
-    } else {
-      const rounded = Math.round(value);
-      result[key] = rounded;
-      remainingTotal -= rounded;
-    }
+  // First pass: floor all values and track which had non-zero original values
+  const flooredValues: { key: keyof ClassificationWeights; floored: number; hadValue: boolean; fractional: number }[] = [];
+  for (const { key, value } of proportionalValues) {
+    const floored = Math.floor(value);
+    flooredValues.push({
+      key,
+      floored,
+      hadValue: weights[key] > 0,
+      fractional: value - floored,
+    });
+    remainingTotal -= floored;
+  }
+
+  // Second pass: distribute remainder, prioritizing items that had original values but got floored to 0
+  // Sort by: 1) had value but floored to 0, 2) highest fractional part
+  const sortedForRemainder = [...flooredValues].sort((a, b) => {
+    // Prioritize items that had a value but were floored to 0
+    const aNeeds = a.hadValue && a.floored === 0 ? 1 : 0;
+    const bNeeds = b.hadValue && b.floored === 0 ? 1 : 0;
+    if (aNeeds !== bNeeds) return bNeeds - aNeeds;
+    // Then sort by fractional part (highest first)
+    return b.fractional - a.fractional;
+  });
+
+  // Assign floored values and distribute remainder
+  for (const { key, floored } of flooredValues) {
+    result[key] = floored;
+  }
+
+  // Distribute remaining points
+  for (const { key } of sortedForRemainder) {
+    if (remainingTotal <= 0) break;
+    result[key] += 1;
+    remainingTotal -= 1;
   }
 
   return result;

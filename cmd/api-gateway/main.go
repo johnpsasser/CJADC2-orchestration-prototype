@@ -53,7 +53,7 @@ func DefaultConfig() Config {
 		HTTPAddr:    "0.0.0.0",
 		HTTPPort:    8080,
 		NATSUrl:     getEnv("NATS_URL", "nats://localhost:4222"),
-		PostgresURL: getEnv("POSTGRES_URL", "postgres://cjadc2:cjadc2@localhost:5432/cjadc2?sslmode=disable"),
+		PostgresURL: getEnv("POSTGRES_URL", "postgres://cjadc2:devpassword@localhost:5432/cjadc2?sslmode=disable"),
 		OPAUrl:      getEnv("OPA_URL", "http://localhost:8181"),
 		CORSOrigins: []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"},
 		LogLevel:    getEnv("LOG_LEVEL", "info"),

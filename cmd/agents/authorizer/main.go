@@ -116,7 +116,7 @@ func (a *AuthorizerAgent) Run(ctx context.Context) error {
 func (a *AuthorizerAgent) connectDB(ctx context.Context) error {
 	dbURL := a.Config().DBUrl
 	if dbURL == "" {
-		dbURL = "postgres://cjadc2:cjadc2@localhost:5432/cjadc2?sslmode=disable"
+		dbURL = "postgres://cjadc2:devpassword@localhost:5432/cjadc2?sslmode=disable"
 	}
 
 	config, err := pgxpool.ParseConfig(dbURL)
@@ -346,7 +346,41 @@ func (a *AuthorizerAgent) processMessage(ctx context.Context, msg jetstream.Msg)
 		return fmt.Errorf("failed to check existing proposal: %w", err)
 	}
 
-	// No existing pending proposal for this track - INSERT new one
+	// Check if there's a recent decision for this track (cooldown period)
+	// This prevents new proposals from being created immediately after a decision
+	var recentDecisionID string
+	var recentDecisionApproved bool
+	var recentDecisionAt time.Time
+	err = a.db.QueryRow(ctx,
+		`SELECT decision_id, approved, approved_at FROM decisions
+		 WHERE track_id = $1 AND approved_at > NOW() - INTERVAL '5 minutes'
+		 ORDER BY approved_at DESC LIMIT 1`,
+		proposal.TrackID,
+	).Scan(&recentDecisionID, &recentDecisionApproved, &recentDecisionAt)
+
+	if err == nil {
+		// Recent decision exists - skip creating new proposal (cooldown period)
+		msg.Ack()
+
+		duration := time.Since(start)
+		a.RecordMessage("success", "proposal")
+		a.RecordLatency("proposal", duration)
+
+		a.logger.Info().
+			Str("correlation_id", correlationID).
+			Str("track_id", proposal.TrackID).
+			Str("recent_decision_id", recentDecisionID).
+			Bool("was_approved", recentDecisionApproved).
+			Time("decided_at", recentDecisionAt).
+			Dur("latency_ms", duration).
+			Msg("Skipped proposal - recent decision exists (cooldown period)")
+
+		return nil
+	} else if err != pgx.ErrNoRows {
+		return fmt.Errorf("failed to check recent decisions: %w", err)
+	}
+
+	// No existing pending proposal or recent decision for this track - INSERT new one
 	_, err = a.db.Exec(ctx, `
 		INSERT INTO proposals (
 			proposal_id, track_id, action_type, priority, threat_level,
@@ -593,7 +627,7 @@ func main() {
 		Type:    agent.AgentTypeAuthorizer,
 		NATSUrl: getEnv("NATS_URL", "nats://localhost:4222"),
 		OPAUrl:  getEnv("OPA_URL", "http://localhost:8181"),
-		DBUrl:   getEnv("DATABASE_URL", "postgres://cjadc2:cjadc2@localhost:5432/cjadc2?sslmode=disable"),
+		DBUrl:   getEnv("DATABASE_URL", "postgres://cjadc2:devpassword@localhost:5432/cjadc2?sslmode=disable"),
 		Secret:  []byte(getEnv("AGENT_SECRET", "authorizer-secret")),
 	}
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -156,6 +157,21 @@ func (a *CorrelatorAgent) consumeMessages(ctx context.Context) error {
 			if err == context.DeadlineExceeded || err == context.Canceled {
 				continue
 			}
+			// Check if consumer was deleted and needs to be recreated
+			errStr := err.Error()
+			if strings.Contains(errStr, "no responders") || strings.Contains(errStr, "consumer not found") || strings.Contains(errStr, "consumer deleted") {
+				a.logger.Warn().Err(err).Msg("Consumer was deleted, recreating...")
+				consumer, recreateErr := natsutil.SetupConsumer(ctx, a.JetStream(), "TRACKS", "correlator")
+				if recreateErr != nil {
+					a.logger.Error().Err(recreateErr).Msg("Failed to recreate consumer")
+					a.RecordError("consumer_recreate_error")
+					time.Sleep(time.Second)
+					continue
+				}
+				a.consumer = consumer
+				a.logger.Info().Msg("Consumer recreated successfully")
+				continue
+			}
 			a.logger.Error().Err(err).Msg("Failed to fetch messages")
 			a.RecordError("fetch_error")
 			time.Sleep(time.Second)
@@ -173,6 +189,20 @@ func (a *CorrelatorAgent) consumeMessages(ctx context.Context) error {
 		}
 
 		if msgs.Error() != nil && msgs.Error() != context.DeadlineExceeded {
+			errStr := msgs.Error().Error()
+			// Check if consumer was deleted and needs to be recreated
+			if strings.Contains(errStr, "no responders") || strings.Contains(errStr, "consumer not found") || strings.Contains(errStr, "consumer deleted") {
+				a.logger.Warn().Err(msgs.Error()).Msg("Consumer was deleted (batch error), recreating...")
+				consumer, recreateErr := natsutil.SetupConsumer(ctx, a.JetStream(), "TRACKS", "correlator")
+				if recreateErr != nil {
+					a.logger.Error().Err(recreateErr).Msg("Failed to recreate consumer")
+					a.RecordError("consumer_recreate_error")
+				} else {
+					a.consumer = consumer
+					a.logger.Info().Msg("Consumer recreated successfully")
+				}
+				continue
+			}
 			a.logger.Warn().Err(msgs.Error()).Msg("Message batch error")
 		}
 	}
