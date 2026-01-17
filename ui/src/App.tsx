@@ -175,21 +175,6 @@ function DashboardContent() {
     staleTime: 3000,
   });
 
-  // Fetch classifier config for processing pause control
-  const { data: classifierConfig, refetch: refetchClassifierConfig } = useQuery({
-    queryKey: ['classifierConfig'],
-    queryFn: classifierApi.getConfig,
-    refetchInterval: 2000,
-  });
-
-  // Mutation to toggle classifier processing pause
-  const toggleProcessingMutation = useMutation({
-    mutationFn: (paused: boolean) => classifierApi.updateConfig({ paused }),
-    onSuccess: () => {
-      refetchClassifierConfig();
-    },
-  });
-
   // Track hooks
   const {
     tracks,
@@ -259,27 +244,61 @@ function DashboardContent() {
     [selectedProposal, deny]
   );
 
+  // Fetch classifier config for processing pause control (used in Tracks tab)
+  const { data: classifierConfig, refetch: refetchClassifierConfig } = useQuery({
+    queryKey: ['classifierConfig'],
+    queryFn: classifierApi.getConfig,
+    refetchInterval: 2000,
+  });
+
+  // Mutation to toggle classifier processing pause
+  const toggleProcessingMutation = useMutation({
+    mutationFn: (paused: boolean) => classifierApi.updateConfig({ paused }),
+    onSuccess: () => {
+      refetchClassifierConfig();
+    },
+  });
+
   // Render active tab content
   const renderContent = () => {
     switch (activeTab) {
       case 'tracks':
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <div className={selectedTrack ? 'lg:col-span-3' : 'lg:col-span-4'}>
-              <TrackTable
-                tracks={tracks}
-                selectedTrackId={selectedTrackId}
-                sortConfig={sortConfig}
-                onSelectTrack={selectTrack}
-                onSort={toggleSort}
-                isLoading={tracksLoading}
-              />
+          <div className="space-y-4">
+            {/* Tracks toolbar */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-200">Active Tracks</h2>
+              <button
+                onClick={() => toggleProcessingMutation.mutate(!classifierConfig?.paused)}
+                disabled={toggleProcessingMutation.isPending}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${
+                  classifierConfig?.paused
+                    ? 'bg-yellow-600 hover:bg-yellow-500 text-white'
+                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                }`}
+              >
+                {classifierConfig?.paused ? 'Resume Processing' : 'Pause Processing'}
+              </button>
             </div>
-            {selectedTrack && (
-              <div className="lg:col-span-1">
-                <TrackDetail track={selectedTrack} onClose={() => selectTrack(null)} />
+
+            {/* Tracks grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className={selectedTrack ? 'lg:col-span-3' : 'lg:col-span-4'}>
+                <TrackTable
+                  tracks={tracks}
+                  selectedTrackId={selectedTrackId}
+                  sortConfig={sortConfig}
+                  onSelectTrack={selectTrack}
+                  onSort={toggleSort}
+                  isLoading={tracksLoading}
+                />
               </div>
-            )}
+              {selectedTrack && (
+                <div className="lg:col-span-1">
+                  <TrackDetail track={selectedTrack} onClose={() => selectTrack(null)} />
+                </div>
+              )}
+            </div>
           </div>
         );
 
@@ -360,19 +379,6 @@ function DashboardContent() {
                 <span className="text-gray-500">Processed:</span>
                 <span className="text-gray-300 font-mono">{systemMetrics?.unique_messages_processed?.toLocaleString() ?? 0}</span>
               </div>
-
-              {/* Processing pause control */}
-              <button
-                onClick={() => toggleProcessingMutation.mutate(!classifierConfig?.paused)}
-                disabled={toggleProcessingMutation.isPending}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                  classifierConfig?.paused
-                    ? 'bg-yellow-600 hover:bg-yellow-500 text-white'
-                    : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                }`}
-              >
-                {classifierConfig?.paused ? 'Resume Processing' : 'Pause Processing'}
-              </button>
 
               {/* Real-time indicator */}
               <LiveIndicator connected={status === 'connected'} paused={sensorConfig?.paused ?? false} />

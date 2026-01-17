@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/agile-defense/cjadc2/pkg/handler"
+	"github.com/agile-defense/cjadc2/pkg/messages"
 	"github.com/agile-defense/cjadc2/pkg/opa"
 	"github.com/agile-defense/cjadc2/pkg/postgres"
 )
@@ -179,6 +181,13 @@ func main() {
 		return nil
 	})
 
+	// Start track persistence consumer (persist correlated tracks to PostgreSQL)
+	if nc != nil {
+		g.Go(func() error {
+			return runTrackPersistenceConsumer(gCtx, nc, db)
+		})
+	}
+
 	// Update WebSocket connection gauge periodically
 	g.Go(func() error {
 		ticker := time.NewTicker(10 * time.Second)
@@ -296,7 +305,7 @@ func setupRouter(cfg Config, db *postgres.Pool, nc *nats.Conn, opaClient *opa.Cl
 	// CORS
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Correlation-ID", "X-Request-ID"},
 		ExposedHeaders:   []string{"X-Correlation-ID", "X-Request-ID"},
 		AllowCredentials: true,
@@ -540,4 +549,49 @@ func maskPassword(url string) string {
 	// Simple masking - replace password portion
 	// This is a basic implementation; a more robust solution would parse the URL properly
 	return url // In production, actually mask the password
+}
+
+// runTrackPersistenceConsumer subscribes to correlated tracks and persists them to PostgreSQL
+func runTrackPersistenceConsumer(ctx context.Context, nc *nats.Conn, db *postgres.Pool) error {
+	log.Info().Msg("Starting track persistence consumer")
+
+	// Subscribe to all correlated track subjects (track.correlated.>)
+	sub, err := nc.Subscribe("track.correlated.>", func(msg *nats.Msg) {
+		var track messages.CorrelatedTrack
+		if err := json.Unmarshal(msg.Data, &track); err != nil {
+			log.Warn().Err(err).Str("subject", msg.Subject).Msg("Failed to unmarshal correlated track")
+			return
+		}
+
+		// Persist the track to PostgreSQL
+		if err := db.UpsertTrack(ctx, &track); err != nil {
+			log.Error().Err(err).
+				Str("track_id", track.TrackID).
+				Str("subject", msg.Subject).
+				Msg("Failed to persist track to database")
+			return
+		}
+
+		log.Debug().
+			Str("track_id", track.TrackID).
+			Str("classification", track.Classification).
+			Str("threat_level", track.ThreatLevel).
+			Msg("Persisted correlated track to database")
+	})
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to track.correlated.>: %w", err)
+	}
+
+	log.Info().Str("subject", "track.correlated.>").Msg("Subscribed to correlated tracks for persistence")
+
+	// Wait for context cancellation
+	<-ctx.Done()
+
+	// Unsubscribe
+	if err := sub.Unsubscribe(); err != nil {
+		log.Warn().Err(err).Msg("Failed to unsubscribe from track subject")
+	}
+
+	log.Info().Msg("Track persistence consumer stopped")
+	return nil
 }
