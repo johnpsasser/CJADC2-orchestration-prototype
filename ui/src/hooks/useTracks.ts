@@ -10,9 +10,16 @@ const STALE_TRACK_AGE_MS = 30 * 1000;
 // How often to check for stale tracks (10 seconds)
 const STALE_CHECK_INTERVAL_MS = 10 * 1000;
 
+// Wrapper to track when each item was first seen in the UI
+// This allows stable row positioning - new tracks at top, existing tracks don't move
+interface TrackedItem {
+  track: CorrelatedTrack;
+  insertedAt: number; // Unix timestamp when first added to UI
+}
+
 // Zustand store for track state
 interface TrackStore {
-  tracks: Map<string, CorrelatedTrack>;
+  tracks: Map<string, TrackedItem>;
   selectedTrackId: string | null;
   sortConfig: SortConfig;
   filter: {
@@ -35,7 +42,7 @@ interface TrackStore {
 export const useTrackStore = create<TrackStore>((set) => ({
   tracks: new Map(),
   selectedTrackId: null,
-  sortConfig: { key: 'last_updated', direction: 'desc' },
+  sortConfig: { key: 'insertedAt', direction: 'desc' },
   filter: {
     classification: null,
     threatLevel: null,
@@ -43,13 +50,28 @@ export const useTrackStore = create<TrackStore>((set) => ({
     searchQuery: '',
   },
   setTracks: (tracks) =>
-    set({
-      tracks: new Map(tracks.map((t) => [t.track_id, t])),
+    set((state) => {
+      const now = Date.now();
+      const newTracks = new Map<string, TrackedItem>();
+      tracks.forEach((t) => {
+        // Preserve insertedAt for existing tracks, set current time for new ones
+        const existing = state.tracks.get(t.track_id);
+        newTracks.set(t.track_id, {
+          track: t,
+          insertedAt: existing?.insertedAt ?? now,
+        });
+      });
+      return { tracks: newTracks };
     }),
   updateTrack: (track) =>
     set((state) => {
       const newTracks = new Map(state.tracks);
-      newTracks.set(track.track_id, track);
+      const existing = state.tracks.get(track.track_id);
+      // Preserve insertedAt for existing tracks, new tracks get current time
+      newTracks.set(track.track_id, {
+        track,
+        insertedAt: existing?.insertedAt ?? Date.now(),
+      });
       return { tracks: newTracks };
     }),
   deleteTrack: (trackId) =>
@@ -80,13 +102,13 @@ export const useTrackStore = create<TrackStore>((set) => ({
   clearStaleTracks: (maxAgeMs: number) =>
     set((state) => {
       const now = Date.now();
-      const newTracks = new Map<string, CorrelatedTrack>();
-      state.tracks.forEach((track, id) => {
-        const lastUpdated = track.last_updated || track.window_end;
+      const newTracks = new Map<string, TrackedItem>();
+      state.tracks.forEach((item, id) => {
+        const lastUpdated = item.track.last_updated || item.track.window_end;
         if (lastUpdated) {
           const trackTime = new Date(lastUpdated).getTime();
           if (now - trackTime <= maxAgeMs) {
-            newTracks.set(id, track);
+            newTracks.set(id, item);
           }
         }
       });
@@ -186,30 +208,38 @@ export function useTracks() {
   const getFilteredTracks = useCallback((): CorrelatedTrack[] => {
     let result = Array.from(tracks.values());
 
-    // Apply filters
+    // Apply filters (on the track data)
     if (filter.classification) {
-      result = result.filter((t) => t.classification === filter.classification);
+      result = result.filter((item) => item.track.classification === filter.classification);
     }
     if (filter.threatLevel) {
-      result = result.filter((t) => t.threat_level === filter.threatLevel);
+      result = result.filter((item) => item.track.threat_level === filter.threatLevel);
     }
     if (filter.type) {
-      result = result.filter((t) => t.type === filter.type);
+      result = result.filter((item) => item.track.type === filter.type);
     }
     if (filter.searchQuery) {
       const query = filter.searchQuery.toLowerCase();
       result = result.filter(
-        (t) =>
-          t.track_id.toLowerCase().includes(query) ||
-          t.classification.toLowerCase().includes(query) ||
-          t.type.toLowerCase().includes(query)
+        (item) =>
+          item.track.track_id.toLowerCase().includes(query) ||
+          item.track.classification.toLowerCase().includes(query) ||
+          item.track.type.toLowerCase().includes(query)
       );
     }
 
-    // Apply sorting
+    // Apply sorting - handle 'insertedAt' specially since it's on TrackedItem, not track
     result.sort((a, b) => {
-      const aValue = getNestedValue(a, sortConfig.key);
-      const bValue = getNestedValue(b, sortConfig.key);
+      let aValue: unknown;
+      let bValue: unknown;
+
+      if (sortConfig.key === 'insertedAt') {
+        aValue = a.insertedAt;
+        bValue = b.insertedAt;
+      } else {
+        aValue = getNestedValue(a.track, sortConfig.key);
+        bValue = getNestedValue(b.track, sortConfig.key);
+      }
 
       if (aValue === bValue) return 0;
       if (aValue === null || aValue === undefined) return 1;
@@ -219,19 +249,20 @@ export function useTracks() {
       return sortConfig.direction === 'asc' ? comparison : -comparison;
     });
 
-    return result;
+    // Return just the track data
+    return result.map((item) => item.track);
   }, [tracks, filter, sortConfig]);
 
   // Get selected track
   const getSelectedTrack = useCallback((): CorrelatedTrack | null => {
     if (!selectedTrackId) return null;
-    return tracks.get(selectedTrackId) || null;
+    return tracks.get(selectedTrackId)?.track || null;
   }, [tracks, selectedTrackId]);
 
   // Get track by ID
   const getTrackById = useCallback(
     (trackId: string): CorrelatedTrack | undefined => {
-      return tracks.get(trackId);
+      return tracks.get(trackId)?.track;
     },
     [tracks]
   );
@@ -254,7 +285,7 @@ export function useTracks() {
   return {
     // Data
     tracks: getFilteredTracks(),
-    allTracks: Array.from(tracks.values()),
+    allTracks: Array.from(tracks.values()).map((item) => item.track),
     selectedTrack: getSelectedTrack(),
     selectedTrackId,
     trackCount: tracks.size,
