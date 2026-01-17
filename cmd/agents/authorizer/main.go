@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -202,6 +203,21 @@ func (a *AuthorizerAgent) consumeMessages(ctx context.Context) error {
 			if err == context.DeadlineExceeded || err == context.Canceled {
 				continue
 			}
+			// Check if consumer was deleted and needs to be recreated
+			errStr := err.Error()
+			if strings.Contains(errStr, "no responders") || strings.Contains(errStr, "consumer not found") || strings.Contains(errStr, "consumer deleted") {
+				a.logger.Warn().Err(err).Msg("Consumer was deleted, recreating...")
+				consumer, recreateErr := natsutil.SetupConsumer(ctx, a.JetStream(), "PROPOSALS", "authorizer")
+				if recreateErr != nil {
+					a.logger.Error().Err(recreateErr).Msg("Failed to recreate consumer")
+					a.RecordError("consumer_recreate_error")
+					time.Sleep(time.Second)
+					continue
+				}
+				a.consumer = consumer
+				a.logger.Info().Msg("Consumer recreated successfully")
+				continue
+			}
 			a.logger.Error().Err(err).Msg("Failed to fetch messages")
 			a.RecordError("fetch_error")
 			time.Sleep(time.Second)
@@ -218,6 +234,20 @@ func (a *AuthorizerAgent) consumeMessages(ctx context.Context) error {
 		}
 
 		if msgs.Error() != nil && msgs.Error() != context.DeadlineExceeded {
+			errStr := msgs.Error().Error()
+			// Check if consumer was deleted and needs to be recreated
+			if strings.Contains(errStr, "no responders") || strings.Contains(errStr, "consumer not found") || strings.Contains(errStr, "consumer deleted") {
+				a.logger.Warn().Err(msgs.Error()).Msg("Consumer was deleted (batch error), recreating...")
+				consumer, recreateErr := natsutil.SetupConsumer(ctx, a.JetStream(), "PROPOSALS", "authorizer")
+				if recreateErr != nil {
+					a.logger.Error().Err(recreateErr).Msg("Failed to recreate consumer")
+					a.RecordError("consumer_recreate_error")
+				} else {
+					a.consumer = consumer
+					a.logger.Info().Msg("Consumer recreated successfully")
+				}
+				continue
+			}
 			a.logger.Warn().Err(msgs.Error()).Msg("Message batch error")
 		}
 	}
@@ -242,41 +272,87 @@ func (a *AuthorizerAgent) processMessage(ctx context.Context, msg jetstream.Msg)
 	a.logger.Info().
 		Str("correlation_id", correlationID).
 		Str("proposal_id", proposal.ProposalID).
+		Str("track_id", proposal.TrackID).
 		Str("action_type", proposal.ActionType).
 		Int("priority", proposal.Priority).
 		Msg("Processing proposal")
 
-	// Check if proposal has already been processed
-	var existingStatus string
+	// Check if there's already a pending proposal for this track
+	var existingProposalID string
+	var existingHitCount int
 	err := a.db.QueryRow(ctx,
-		"SELECT status FROM proposals WHERE proposal_id = $1",
-		proposal.ProposalID,
-	).Scan(&existingStatus)
+		"SELECT proposal_id, hit_count FROM proposals WHERE track_id = $1 AND status = 'pending'",
+		proposal.TrackID,
+	).Scan(&existingProposalID, &existingHitCount)
+
+	constraintsJSON, _ := json.Marshal(proposal.Constraints)
+	trackDataJSON, _ := json.Marshal(proposal.Track)
+	policyJSON, _ := json.Marshal(proposal.PolicyDecision)
+	now := time.Now().UTC()
 
 	if err == nil {
-		// Proposal already exists
-		a.logger.Info().
-			Str("proposal_id", proposal.ProposalID).
-			Str("status", existingStatus).
-			Msg("Proposal already processed")
+		// Existing pending proposal for this track - UPDATE it
+		newHitCount := existingHitCount + 1
+
+		// Take the higher priority, update track data, increment hit count
+		_, err = a.db.Exec(ctx, `
+			UPDATE proposals SET
+				track_data = $1,
+				priority = GREATEST(priority, $2),
+				threat_level = $3,
+				action_type = CASE WHEN $2 > priority THEN $4 ELSE action_type END,
+				rationale = CASE WHEN $2 > priority THEN $5 ELSE rationale END,
+				constraints = CASE WHEN $2 > priority THEN $6 ELSE constraints END,
+				policy_decision = $7,
+				hit_count = $8,
+				last_hit_at = $9,
+				expires_at = GREATEST(expires_at, $10),
+				updated_at = $9
+			WHERE proposal_id = $11
+		`,
+			trackDataJSON,
+			proposal.Priority,
+			proposal.ThreatLevel,
+			proposal.ActionType,
+			proposal.Rationale,
+			constraintsJSON,
+			policyJSON,
+			newHitCount,
+			now,
+			proposal.ExpiresAt,
+			existingProposalID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update proposal: %w", err)
+		}
+
+		// ACK immediately - we've merged this into existing proposal
 		msg.Ack()
+
+		duration := time.Since(start)
+		a.RecordMessage("success", "proposal")
+		a.RecordLatency("proposal", duration)
+
+		a.logger.Info().
+			Str("correlation_id", correlationID).
+			Str("existing_proposal_id", existingProposalID).
+			Str("track_id", proposal.TrackID).
+			Int("hit_count", newHitCount).
+			Dur("latency_ms", duration).
+			Msg("Merged into existing proposal (de-duplicated)")
+
 		return nil
 	} else if err != pgx.ErrNoRows {
 		return fmt.Errorf("failed to check existing proposal: %w", err)
 	}
 
-	// Store proposal in database
-	constraintsJSON, _ := json.Marshal(proposal.Constraints)
-	trackDataJSON, _ := json.Marshal(proposal.Track)
-	policyJSON, _ := json.Marshal(proposal.PolicyDecision)
-
+	// No existing pending proposal for this track - INSERT new one
 	_, err = a.db.Exec(ctx, `
 		INSERT INTO proposals (
 			proposal_id, track_id, action_type, priority, threat_level,
 			rationale, constraints, track_data, policy_decision, expires_at,
-			status, correlation_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11)
-		ON CONFLICT (proposal_id) DO NOTHING
+			status, correlation_id, hit_count, last_hit_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', $11, 1, $12)
 	`,
 		proposal.ProposalID,
 		proposal.TrackID,
@@ -289,8 +365,18 @@ func (a *AuthorizerAgent) processMessage(ctx context.Context, msg jetstream.Msg)
 		policyJSON,
 		proposal.ExpiresAt,
 		correlationID,
+		now,
 	)
 	if err != nil {
+		// Check if it's a unique constraint violation (race condition - another proposal was just inserted)
+		if strings.Contains(err.Error(), "idx_proposals_track_pending_unique") {
+			// Retry by updating the existing proposal
+			a.logger.Debug().
+				Str("track_id", proposal.TrackID).
+				Msg("Race condition detected, retrying as update")
+			msg.Nak() // Will be redelivered and handled as update
+			return nil
+		}
 		return fmt.Errorf("failed to store proposal: %w", err)
 	}
 
@@ -311,8 +397,9 @@ func (a *AuthorizerAgent) processMessage(ctx context.Context, msg jetstream.Msg)
 	a.logger.Info().
 		Str("correlation_id", correlationID).
 		Str("proposal_id", proposal.ProposalID).
+		Str("track_id", proposal.TrackID).
 		Dur("latency_ms", duration).
-		Msg("Proposal stored, awaiting human decision")
+		Msg("New proposal stored, awaiting human decision")
 
 	return nil
 }
@@ -444,7 +531,7 @@ func (a *AuthorizerAgent) GetPendingProposals(ctx context.Context) ([]map[string
 	rows, err := a.db.Query(ctx, `
 		SELECT proposal_id, track_id, action_type, priority, threat_level,
 			   rationale, constraints, track_data, policy_decision, expires_at,
-			   created_at, correlation_id
+			   created_at, correlation_id, hit_count, last_hit_at
 		FROM proposals
 		WHERE status = 'pending' AND expires_at > NOW()
 		ORDER BY priority DESC, created_at ASC
@@ -458,15 +545,15 @@ func (a *AuthorizerAgent) GetPendingProposals(ctx context.Context) ([]map[string
 	for rows.Next() {
 		var (
 			proposalID, trackID, actionType, threatLevel, rationale, correlationID string
-			priority                                                                int
+			priority, hitCount                                                      int
 			constraints, trackData, policyDecision                                  []byte
-			expiresAt, createdAt                                                    time.Time
+			expiresAt, createdAt, lastHitAt                                         time.Time
 		)
 
 		if err := rows.Scan(
 			&proposalID, &trackID, &actionType, &priority, &threatLevel,
 			&rationale, &constraints, &trackData, &policyDecision, &expiresAt,
-			&createdAt, &correlationID,
+			&createdAt, &correlationID, &hitCount, &lastHitAt,
 		); err != nil {
 			continue
 		}
@@ -491,6 +578,8 @@ func (a *AuthorizerAgent) GetPendingProposals(ctx context.Context) ([]map[string
 			"expires_at":      expiresAt,
 			"created_at":      createdAt,
 			"correlation_id":  correlationID,
+			"hit_count":       hitCount,
+			"last_hit_at":     lastHitAt,
 		})
 	}
 

@@ -160,18 +160,22 @@ function ProposalCard({ proposal, onApprove, onDeny }: ProposalCardProps) {
       {/* Track Info */}
       <div className="mb-3 space-y-1">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Track:</span>
-          <span className="font-mono text-sm text-gray-300">{proposal.track_id}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Type:</span>
-          <span className="text-sm text-gray-300 capitalize">{proposal.track?.type || 'unknown'}</span>
-        </div>
-        <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">Threat:</span>
           <span className={clsx('text-sm font-medium', threatLevelColors[proposal.threat_level])}>
             {proposal.threat_level.toUpperCase()}
           </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Track:</span>
+          <span className="font-mono text-sm text-gray-300">{proposal.track_id}</span>
+          <span className="text-gray-600">|</span>
+          <span className="text-xs text-gray-500">Type:</span>
+          <span className="text-sm text-gray-300 capitalize">{proposal.track?.type || 'unknown'}</span>
+          {(proposal.hit_count ?? 1) > 1 && (
+            <span className="px-1.5 py-0.5 text-xs font-medium bg-cyan-900/50 text-cyan-300 rounded">
+              {proposal.hit_count} hits
+            </span>
+          )}
         </div>
       </div>
 
@@ -250,6 +254,9 @@ function ProposalListView({ proposals, onApprove, onDeny }: ProposalListViewProp
               Priority
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Hits
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
               Time Remaining
             </th>
             <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -325,6 +332,20 @@ function ProposalListView({ proposals, onApprove, onDeny }: ProposalListViewProp
                     )}
                   >
                     P{proposal.priority}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <span
+                    className={clsx(
+                      'inline-flex px-2 py-1 text-xs font-medium rounded',
+                      (proposal.hit_count ?? 1) > 5
+                        ? 'bg-cyan-900/50 text-cyan-300'
+                        : (proposal.hit_count ?? 1) > 1
+                        ? 'bg-cyan-900/30 text-cyan-400'
+                        : 'bg-gray-700 text-gray-400'
+                    )}
+                  >
+                    {proposal.hit_count ?? 1}
                   </span>
                 </td>
                 <td className="px-4 py-3">

@@ -23,6 +23,10 @@ type ActionProposal struct {
 	// Timing
 	ExpiresAt time.Time `json:"expires_at"`
 
+	// De-duplication tracking
+	HitCount  int       `json:"hit_count"`   // Number of sensor hits for this track
+	LastHitAt time.Time `json:"last_hit_at"` // When the most recent sensor hit occurred
+
 	// Policy
 	PolicyDecision PolicyDecision `json:"policy_decision"`
 }
@@ -47,6 +51,7 @@ func (ap *ActionProposal) Subject() string {
 
 // NewActionProposal creates a new action proposal
 func NewActionProposal(track *CorrelatedTrack, plannerID string) *ActionProposal {
+	now := time.Now().UTC()
 	return &ActionProposal{
 		Envelope: NewEnvelope(plannerID, "planner").
 			WithCorrelation(track.Envelope.CorrelationID, track.Envelope.MessageID),
@@ -56,7 +61,9 @@ func NewActionProposal(track *CorrelatedTrack, plannerID string) *ActionProposal
 		Priority:    5,
 		ThreatLevel: track.ThreatLevel,
 		Track:       track,
-		ExpiresAt:   time.Now().UTC().Add(5 * time.Minute),
+		ExpiresAt:   now.Add(5 * time.Minute),
+		HitCount:    1,
+		LastHitAt:   now,
 	}
 }
 

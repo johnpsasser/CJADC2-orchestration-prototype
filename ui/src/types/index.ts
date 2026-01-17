@@ -103,6 +103,8 @@ export interface ActionProposal {
   policy_decision: PolicyDecision;
   status?: string; // Added - returned by backend
   created_at?: string; // Added - returned by backend
+  hit_count?: number; // Number of sensor hits for this track (de-duplication counter)
+  last_hit_at?: string; // When the most recent sensor hit occurred
 }
 
 // Decision represents a human decision on an action proposal

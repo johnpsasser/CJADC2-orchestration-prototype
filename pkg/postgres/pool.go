@@ -451,6 +451,8 @@ type ProposalRow struct {
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
 	PolicyDecision json.RawMessage `json:"policy_decision"`
+	HitCount       int             `json:"hit_count"`
+	LastHitAt      time.Time       `json:"last_hit_at"`
 }
 
 // ProposalFilter defines filter options for proposal queries
@@ -469,7 +471,8 @@ func (p *Pool) ListProposals(ctx context.Context, filter ProposalFilter) ([]Prop
 		SELECT
 			p.proposal_id, p.track_id as external_track_id, p.action_type, p.priority,
 			p.threat_level, p.rationale, p.status, p.expires_at,
-			p.created_at, p.updated_at, p.policy_decision as policy_result
+			p.created_at, p.updated_at, p.policy_decision as policy_result,
+			COALESCE(p.hit_count, 1) as hit_count, COALESCE(p.last_hit_at, p.created_at) as last_hit_at
 		FROM proposals p
 		WHERE 1=1
 	`
@@ -526,6 +529,7 @@ func (p *Pool) ListProposals(ctx context.Context, filter ProposalFilter) ([]Prop
 			&pr.ProposalID, &pr.TrackID, &pr.ActionType, &pr.Priority,
 			&pr.ThreatLevel, &pr.Rationale, &pr.Status, &pr.ExpiresAt,
 			&pr.CreatedAt, &pr.UpdatedAt, &pr.PolicyDecision,
+			&pr.HitCount, &pr.LastHitAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan proposal: %w", err)
@@ -546,7 +550,8 @@ func (p *Pool) GetProposal(ctx context.Context, proposalID string) (*ProposalRow
 		SELECT
 			p.proposal_id, p.track_id as external_track_id, p.action_type, p.priority,
 			p.threat_level, p.rationale, p.status, p.expires_at,
-			p.created_at, p.updated_at, p.policy_decision as policy_result
+			p.created_at, p.updated_at, p.policy_decision as policy_result,
+			COALESCE(p.hit_count, 1) as hit_count, COALESCE(p.last_hit_at, p.created_at) as last_hit_at
 		FROM proposals p
 		WHERE p.proposal_id = $1
 	`
@@ -556,6 +561,7 @@ func (p *Pool) GetProposal(ctx context.Context, proposalID string) (*ProposalRow
 		&pr.ProposalID, &pr.TrackID, &pr.ActionType, &pr.Priority,
 		&pr.ThreatLevel, &pr.Rationale, &pr.Status, &pr.ExpiresAt,
 		&pr.CreatedAt, &pr.UpdatedAt, &pr.PolicyDecision,
+		&pr.HitCount, &pr.LastHitAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil

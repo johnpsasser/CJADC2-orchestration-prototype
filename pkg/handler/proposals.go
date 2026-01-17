@@ -76,6 +76,8 @@ type ProposalResponse struct {
 	CreatedAt      time.Time       `json:"created_at"`
 	PolicyDecision json.RawMessage `json:"policy_decision,omitempty"`
 	Track          *TrackInfo      `json:"track,omitempty"`
+	HitCount       int             `json:"hit_count"`
+	LastHitAt      time.Time       `json:"last_hit_at"`
 }
 
 // ListProposals handles GET /api/v1/proposals
@@ -149,6 +151,8 @@ func (h *ProposalHandler) ListProposals(w http.ResponseWriter, r *http.Request) 
 			ExpiresAt:      p.ExpiresAt,
 			CreatedAt:      p.CreatedAt,
 			PolicyDecision: p.PolicyDecision,
+			HitCount:       p.HitCount,
+			LastHitAt:      p.LastHitAt,
 		}
 		if track, exists := trackMap[p.TrackID]; exists {
 			pr.Track = track
@@ -214,6 +218,8 @@ func (h *ProposalHandler) GetProposal(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:      proposal.CreatedAt,
 			PolicyDecision: proposal.PolicyDecision,
 			Track:          trackInfo,
+			HitCount:       proposal.HitCount,
+			LastHitAt:      proposal.LastHitAt,
 		},
 		CorrelationID: correlationID,
 	}
