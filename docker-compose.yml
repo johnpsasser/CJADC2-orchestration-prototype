@@ -104,6 +104,7 @@ services:
       AGENT_TYPE: sensor
       NATS_URL: nats://nats:4222
       OPA_URL: http://opa:8181
+      POSTGRES_URL: postgres://cjadc2:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/cjadc2?sslmode=disable
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       EMISSION_INTERVAL: 5s
       TRACK_COUNT: 5
@@ -111,6 +112,8 @@ services:
       nats:
         condition: service_healthy
       opa:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     restart: unless-stopped
     networks:

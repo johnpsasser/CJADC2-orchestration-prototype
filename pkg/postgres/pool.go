@@ -1295,6 +1295,39 @@ func (p *Pool) CountPendingProposals(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
+// CountTotalDetections returns the total count of unique detection messages ever processed
+func (p *Pool) CountTotalDetections(ctx context.Context) (int64, error) {
+	var count int64
+	err := p.QueryRow(ctx, `SELECT COUNT(*) FROM detections`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count detections: %w", err)
+	}
+	return count, nil
+}
+
+// IncrementCounter atomically increments a named counter and returns the new value
+func (p *Pool) IncrementCounter(ctx context.Context, counterName string, increment int64) (int64, error) {
+	var newValue int64
+	err := p.QueryRow(ctx, `SELECT increment_counter($1, $2)`, counterName, increment).Scan(&newValue)
+	if err != nil {
+		return 0, fmt.Errorf("increment counter %s: %w", counterName, err)
+	}
+	return newValue, nil
+}
+
+// GetCounter returns the current value of a named counter
+func (p *Pool) GetCounter(ctx context.Context, counterName string) (int64, error) {
+	var value int64
+	err := p.QueryRow(ctx, `SELECT counter_value FROM system_counters WHERE counter_name = $1`, counterName).Scan(&value)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("get counter %s: %w", counterName, err)
+	}
+	return value, nil
+}
+
 // ClearAllResult contains the counts of deleted records per table
 type ClearAllResult struct {
 	Effects    int64
@@ -1361,3 +1394,4 @@ func (p *Pool) ClearAll(ctx context.Context) (*ClearAllResult, error) {
 func (p *Pool) Health(ctx context.Context) error {
 	return p.Ping(ctx)
 }
+

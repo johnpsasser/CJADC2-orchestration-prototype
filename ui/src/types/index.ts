@@ -173,6 +173,8 @@ export interface SystemMetrics {
   end_to_end_latency_p95_ms: number;
   end_to_end_latency_p99_ms: number;
   messages_per_minute: number;
+  unique_messages_processed: number;
+  queue_depth: number;
   active_tracks: number;
   pending_proposals: number;
   timestamp: string;

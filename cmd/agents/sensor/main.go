@@ -20,6 +20,7 @@ import (
 	"github.com/agile-defense/cjadc2/pkg/agent"
 	"github.com/agile-defense/cjadc2/pkg/messages"
 	natsutil "github.com/agile-defense/cjadc2/pkg/nats"
+	"github.com/agile-defense/cjadc2/pkg/postgres"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
@@ -259,6 +260,7 @@ type ConfigUpdateRequest struct {
 	Paused                *bool           `json:"paused,omitempty"`
 	TypeWeights           *map[string]int `json:"type_weights,omitempty"`
 	ClassificationWeights *map[string]int `json:"classification_weights,omitempty"`
+	ClearStreams          *bool           `json:"clear_streams,omitempty"` // Action: purge NATS streams when true
 }
 
 // SensorAgent generates synthetic detection events
@@ -267,6 +269,9 @@ type SensorAgent struct {
 
 	// Thread-safe configuration
 	config *SensorConfig
+
+	// Database connection (optional)
+	db *postgres.Pool
 
 	// Simulated tracks
 	tracksMu sync.RWMutex
@@ -299,6 +304,18 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Initialize database connection (optional - sensor continues without it)
+	postgresURL := getEnv("POSTGRES_URL", "postgres://cjadc2:cjadc2@localhost:5432/cjadc2?sslmode=disable")
+	dbCtx, dbCancel := context.WithTimeout(ctx, 5*time.Second)
+	db, err := postgres.NewPoolFromURL(dbCtx, postgresURL)
+	dbCancel()
+	if err != nil {
+		sensor.Logger().Warn().Err(err).Msg("Failed to connect to PostgreSQL, counter tracking disabled")
+	} else {
+		sensor.db = db
+		sensor.Logger().Info().Msg("Connected to PostgreSQL for counter tracking")
+	}
+
 	// Handle shutdown signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -319,6 +336,11 @@ func main() {
 	if err := sensor.Run(ctx); err != nil && err != context.Canceled {
 		fmt.Fprintf(os.Stderr, "Sensor agent error: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Close database connection on shutdown
+	if sensor.db != nil {
+		sensor.db.Close()
 	}
 
 	sensor.Stop(context.Background())
@@ -434,8 +456,9 @@ func (s *SensorAgent) handlePatchConfig(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Track if track count changed for later adjustment
+	// Track changes for later track regeneration
 	var trackCountChanged bool
+	var weightsChanged bool
 	var newTrackCount int
 
 	// Apply updates
@@ -468,6 +491,7 @@ func (s *SensorAgent) handlePatchConfig(w http.ResponseWriter, r *http.Request) 
 			s.writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		weightsChanged = true
 		s.Logger().Info().Interface("type_weights", *req.TypeWeights).Msg("Updated type weights")
 	}
 
@@ -476,12 +500,30 @@ func (s *SensorAgent) handlePatchConfig(w http.ResponseWriter, r *http.Request) 
 			s.writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		weightsChanged = true
 		s.Logger().Info().Interface("classification_weights", *req.ClassificationWeights).Msg("Updated classification weights")
 	}
 
-	// Adjust tracks if count changed
-	if trackCountChanged {
+	// Regenerate all tracks if weights changed (to apply new type/classification distribution)
+	// Otherwise just adjust track count if needed
+	if weightsChanged {
+		currentCount := s.config.GetTrackCount()
+		if trackCountChanged {
+			currentCount = newTrackCount
+		}
+		s.reinitializeTracks(currentCount)
+		s.Logger().Info().Int("track_count", currentCount).Msg("Regenerated all tracks with new distribution weights")
+	} else if trackCountChanged {
 		s.adjustTrackCount(newTrackCount)
+	}
+
+	// Purge NATS streams if requested (typically used with paused=true)
+	if req.ClearStreams != nil && *req.ClearStreams {
+		s.Logger().Info().Msg("Purging NATS JetStream streams")
+		if err := s.purgeStreams(r.Context()); err != nil {
+			s.Logger().Error().Err(err).Msg("Error during stream purge")
+			// Continue anyway - partial purge is still useful
+		}
 	}
 
 	// Return updated config
@@ -510,6 +552,49 @@ func (s *SensorAgent) writeError(w http.ResponseWriter, status int, message stri
 	})
 }
 
+// purgeStreams purges all NATS JetStream streams and deletes consumers to clear message backlogs
+// This ensures that in-flight messages held by consumers are also discarded
+func (s *SensorAgent) purgeStreams(ctx context.Context) error {
+	js := s.JetStream()
+
+	// Stream -> Consumer mappings
+	streamConsumers := map[string][]string{
+		"DETECTIONS": {"classifier"},
+		"TRACKS":     {"correlator", "planner"},
+		"PROPOSALS":  {"authorizer"},
+		"DECISIONS":  {"effector"},
+		"EFFECTS":    {},
+	}
+
+	for streamName, consumers := range streamConsumers {
+		stream, err := js.Stream(ctx, streamName)
+		if err != nil {
+			s.Logger().Warn().Str("stream", streamName).Err(err).Msg("Could not access stream for purge")
+			continue
+		}
+
+		// Delete consumers first - this clears their in-flight message buffers
+		// Consumers will be auto-recreated by the agents when they next try to consume
+		for _, consumerName := range consumers {
+			if err := stream.DeleteConsumer(ctx, consumerName); err != nil {
+				s.Logger().Warn().Str("stream", streamName).Str("consumer", consumerName).Err(err).Msg("Could not delete consumer")
+			} else {
+				s.Logger().Info().Str("stream", streamName).Str("consumer", consumerName).Msg("Deleted consumer")
+			}
+		}
+
+		// Then purge the stream
+		if err := stream.Purge(ctx); err != nil {
+			s.Logger().Error().Str("stream", streamName).Err(err).Msg("Failed to purge stream")
+			continue
+		}
+
+		s.Logger().Info().Str("stream", streamName).Msg("Purged stream")
+	}
+
+	return nil
+}
+
 // adjustTrackCount adds or removes tracks to match the new count
 func (s *SensorAgent) adjustTrackCount(newCount int) {
 	s.tracksMu.Lock()
@@ -533,6 +618,16 @@ func (s *SensorAgent) reinitializeTracks(count int) {
 
 	s.tracks = make(map[string]*simulatedTrack)
 	s.initializeTracksLocked(count)
+
+	// Log summary of track types generated
+	typeCounts := make(map[string]int)
+	for _, track := range s.tracks {
+		typeCounts[track.trackType]++
+	}
+	s.Logger().Info().
+		Interface("type_distribution", typeCounts).
+		Int("total_tracks", len(s.tracks)).
+		Msg("Track generation summary after reinitialization")
 }
 
 // initializeTracks creates initial simulated tracks
@@ -540,6 +635,16 @@ func (s *SensorAgent) initializeTracks(count int) {
 	s.tracksMu.Lock()
 	defer s.tracksMu.Unlock()
 	s.initializeTracksLocked(count)
+
+	// Log summary of track types generated
+	typeCounts := make(map[string]int)
+	for _, track := range s.tracks {
+		typeCounts[track.trackType]++
+	}
+	s.Logger().Info().
+		Interface("type_distribution", typeCounts).
+		Int("total_tracks", len(s.tracks)).
+		Msg("Track generation summary after initialization")
 }
 
 // weightedRandomSelect selects a key from a weights map using weighted random selection
@@ -621,6 +726,13 @@ func (s *SensorAgent) addSingleTrackLocked(index int) {
 
 	// Select track type using weighted random
 	trackType := weightedRandomSelect(typeWeights)
+
+	// Debug logging to verify track type generation
+	s.Logger().Debug().
+		Int("index", index).
+		Str("selected_type", trackType).
+		Interface("type_weights", typeWeights).
+		Msg("Generated track with type")
 
 	// Select classification using weighted random
 	// For missiles, use special missile classification weights (90% hostile, 10% unknown)
@@ -767,6 +879,15 @@ func (s *SensorAgent) emitDetections(ctx context.Context) {
 			SensorID:   s.ID(),
 		}
 
+		// Debug log for missile types to verify they're being emitted
+		if track.trackType == "missile" {
+			s.Logger().Info().
+				Str("track_id", track.id).
+				Str("track_type", track.trackType).
+				Str("detection_type", detection.Type).
+				Msg("Emitting missile detection")
+		}
+
 		// Set correlation ID (new chain for each detection)
 		detection.Envelope.CorrelationID = uuid.New().String()
 
@@ -843,6 +964,16 @@ func (s *SensorAgent) publishDetection(ctx context.Context, det *messages.Detect
 	_, err = s.JetStream().Publish(ctx, subject, data, jetstream.WithMsgID(det.Envelope.MessageID))
 	if err != nil {
 		return fmt.Errorf("failed to publish to %s: %w", subject, err)
+	}
+
+	// Increment database counter after successful publish
+	if s.db != nil {
+		counterCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		_, err := s.db.IncrementCounter(counterCtx, "messages_processed", 1)
+		cancel()
+		if err != nil {
+			s.Logger().Warn().Err(err).Msg("Failed to increment message counter")
+		}
 	}
 
 	s.Logger().Debug().

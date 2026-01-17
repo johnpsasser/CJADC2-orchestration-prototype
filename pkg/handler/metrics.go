@@ -1,10 +1,14 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/rs/zerolog"
 
 	"github.com/agile-defense/cjadc2/pkg/postgres"
@@ -13,15 +17,53 @@ import (
 // MetricsHandler handles metrics-related HTTP requests
 type MetricsHandler struct {
 	db     *postgres.Pool
+	nc     *nats.Conn
 	logger zerolog.Logger
 }
 
 // NewMetricsHandler creates a new MetricsHandler
-func NewMetricsHandler(db *postgres.Pool, logger zerolog.Logger) *MetricsHandler {
+func NewMetricsHandler(db *postgres.Pool, nc *nats.Conn, logger zerolog.Logger) *MetricsHandler {
 	return &MetricsHandler{
 		db:     db,
+		nc:     nc,
 		logger: logger.With().Str("handler", "metrics").Logger(),
 	}
+}
+
+// GetNATSQueueDepth returns the total number of pending messages in the automatic processing pipeline
+// This excludes the authorizer consumer since those are proposals awaiting human approval
+func (h *MetricsHandler) GetNATSQueueDepth(ctx context.Context) (int64, error) {
+	if h.nc == nil {
+		return 0, nil
+	}
+
+	js, err := jetstream.New(h.nc)
+	if err != nil {
+		return 0, fmt.Errorf("create jetstream context: %w", err)
+	}
+
+	var totalPending int64
+	// Only include automatic processing streams (exclude PROPOSALS which requires human approval)
+	streamNames := []string{"DETECTIONS", "TRACKS", "DECISIONS"}
+
+	for _, streamName := range streamNames {
+		stream, err := js.Stream(ctx, streamName)
+		if err != nil {
+			h.logger.Warn().Err(err).Str("stream", streamName).Msg("Failed to get stream")
+			continue
+		}
+
+		// Iterate over all consumers in this stream and sum their pending counts
+		consumerLister := stream.ListConsumers(ctx)
+		for info := range consumerLister.Info() {
+			totalPending += int64(info.NumPending) + int64(info.NumAckPending)
+		}
+		if err := consumerLister.Err(); err != nil {
+			h.logger.Warn().Err(err).Str("stream", streamName).Msg("Failed to list consumers")
+		}
+	}
+
+	return totalPending, nil
 }
 
 // Routes returns the metrics routes
@@ -184,14 +226,16 @@ func (h *MetricsHandler) GetLatencyMetrics(w http.ResponseWriter, r *http.Reques
 
 // SystemMetricsResponse represents overall system metrics (matches frontend SystemMetrics type)
 type SystemMetricsResponse struct {
-	Stages                 []FrontendStageMetrics `json:"stages"`
-	EndToEndLatencyP50Ms   float64                `json:"end_to_end_latency_p50_ms"`
-	EndToEndLatencyP95Ms   float64                `json:"end_to_end_latency_p95_ms"`
-	EndToEndLatencyP99Ms   float64                `json:"end_to_end_latency_p99_ms"`
-	MessagesPerMinute      float64                `json:"messages_per_minute"`
-	ActiveTracks           int64                  `json:"active_tracks"`
-	PendingProposals       int64                  `json:"pending_proposals"`
-	Timestamp              string                 `json:"timestamp"`
+	Stages                  []FrontendStageMetrics `json:"stages"`
+	EndToEndLatencyP50Ms    float64                `json:"end_to_end_latency_p50_ms"`
+	EndToEndLatencyP95Ms    float64                `json:"end_to_end_latency_p95_ms"`
+	EndToEndLatencyP99Ms    float64                `json:"end_to_end_latency_p99_ms"`
+	MessagesPerMinute       float64                `json:"messages_per_minute"`
+	UniqueMessagesProcessed int64                  `json:"unique_messages_processed"`
+	QueueDepth              int64                  `json:"queue_depth"`
+	ActiveTracks            int64                  `json:"active_tracks"`
+	PendingProposals        int64                  `json:"pending_proposals"`
+	Timestamp               string                 `json:"timestamp"`
 }
 
 // FrontendStageMetrics matches the frontend StageMetrics type
@@ -249,6 +293,20 @@ func (h *MetricsHandler) GetCurrentMetrics(w http.ResponseWriter, r *http.Reques
 		e2eP50, e2eP95, e2eP99 = 0, 0, 0
 	}
 
+	// Get total unique messages processed from system counter (persists across restarts)
+	uniqueMessagesProcessed, err := h.db.GetCounter(ctx, "messages_processed")
+	if err != nil {
+		h.logger.Warn().Err(err).Str("correlation_id", correlationID).Msg("Failed to get message counter, using 0")
+		uniqueMessagesProcessed = 0
+	}
+
+	// Get real queue depth from NATS (total pending messages in pipeline)
+	queueDepth, err := h.GetNATSQueueDepth(ctx)
+	if err != nil {
+		h.logger.Warn().Err(err).Str("correlation_id", correlationID).Msg("Failed to get NATS queue depth, using 0")
+		queueDepth = 0
+	}
+
 	// Build response with stage metrics
 	stages := make([]FrontendStageMetrics, 0, len(stageMetrics))
 	for _, m := range stageMetrics {
@@ -272,14 +330,16 @@ func (h *MetricsHandler) GetCurrentMetrics(w http.ResponseWriter, r *http.Reques
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05Z07:00")
 
 	response := SystemMetricsResponse{
-		Stages:               stages,
-		EndToEndLatencyP50Ms: e2eP50,
-		EndToEndLatencyP95Ms: e2eP95,
-		EndToEndLatencyP99Ms: e2eP99,
-		MessagesPerMinute:    messagesPerMinute,
-		ActiveTracks:         activeTracks,
-		PendingProposals:     pendingProposals,
-		Timestamp:            timestamp,
+		Stages:                  stages,
+		EndToEndLatencyP50Ms:    e2eP50,
+		EndToEndLatencyP95Ms:    e2eP95,
+		EndToEndLatencyP99Ms:    e2eP99,
+		MessagesPerMinute:       messagesPerMinute,
+		UniqueMessagesProcessed: uniqueMessagesProcessed,
+		QueueDepth:              queueDepth,
+		ActiveTracks:            activeTracks,
+		PendingProposals:        pendingProposals,
+		Timestamp:               timestamp,
 	}
 
 	WriteJSON(w, http.StatusOK, response)

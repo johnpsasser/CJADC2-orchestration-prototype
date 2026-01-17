@@ -13,6 +13,7 @@ import { MetricsDashboard } from './components/MetricsDashboard';
 import { AuditTrail } from './components/AuditTrail';
 import { SensorControlPage } from './pages/SensorControlPage';
 import { sensorApi } from './api/sensor';
+import { api } from './api/client';
 import type { ConnectionStatus, SystemMetrics } from './types';
 
 // Create a client
@@ -162,6 +163,17 @@ function DashboardContent() {
     staleTime: 3000,
   });
 
+  // Fetch system metrics for database-backed message count (persists across page reloads)
+  const { data: systemMetrics } = useQuery({
+    queryKey: ['systemMetrics'],
+    queryFn: async () => {
+      const response = await api.metrics.getCurrent();
+      return response.data;
+    },
+    refetchInterval: 5000,
+    staleTime: 3000,
+  });
+
   // Track hooks
   const {
     tracks,
@@ -195,7 +207,7 @@ function DashboardContent() {
   } = useProposals();
 
   // WebSocket connection
-  const { status, reconnect, messageCount } = useWebSocket({
+  const { status, reconnect } = useWebSocket({
     onTrackUpdate: handleTrackUpdate,
     onTrackDelete: handleTrackDelete,
     onProposalNew: handleProposalNew,
@@ -321,10 +333,16 @@ function DashboardContent() {
 
             {/* Status indicators */}
             <div className="flex items-center gap-6">
-              {/* Message count */}
+              {/* Queue Depth - pending items awaiting approval */}
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-gray-500">Messages:</span>
-                <span className="text-gray-300 font-mono">{messageCount}</span>
+                <span className="text-gray-500">Queue:</span>
+                <span className="text-gray-300 font-mono">{systemMetrics?.queue_depth?.toLocaleString() ?? 0}</span>
+              </div>
+
+              {/* Unique Messages Processed - persists across restarts */}
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500">Processed:</span>
+                <span className="text-gray-300 font-mono">{systemMetrics?.unique_messages_processed?.toLocaleString() ?? 0}</span>
               </div>
 
               {/* Real-time indicator */}

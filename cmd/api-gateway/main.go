@@ -332,7 +332,7 @@ func setupRouter(cfg Config, db *postgres.Pool, nc *nats.Conn, opaClient *opa.Cl
 		r.Mount("/effects", effectHandler.Routes())
 
 		// Metrics handlers
-		metricsHandler := handler.NewMetricsHandler(db, log.Logger)
+		metricsHandler := handler.NewMetricsHandler(db, nc, log.Logger)
 		r.Mount("/metrics", metricsHandler.Routes())
 
 		// Audit handlers
