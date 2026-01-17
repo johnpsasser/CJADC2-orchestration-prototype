@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Decision Records - CJADC2 Orchestration Platform</title>
+    <style>
+        /* ============================================
+           CSS VARIABLES - Monochrome Professional Theme
+           ============================================ */
+        :root {
+            --primary-dark: #1a1a1a;
+            --primary-medium: #333333;
+            --accent-gray: #555555;
+            --light-gray: #f5f5f5;
+            --medium-gray: #e5e5e5;
+            --text-primary: #1a1a1a;
+            --text-secondary: #444444;
+            --text-muted: #777777;
+            --border-color: #d0d0d0;
+            --background: #ffffff;
+            --code-bg: #f8f8f8;
+        }
+
+        /* ============================================
+           BASE STYLES
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            page-break-before: auto !important;
+            page-break-after: auto !important;
+            page-break-inside: auto !important;
+            break-before: auto !important;
+            break-after: auto !important;
+            break-inside: auto !important;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--background);
+            max-width: 7in;
+            margin: 0 auto;
+            padding: 2em 0;
+        }
+
+        /* ============================================
+           TYPOGRAPHY
+           ============================================ */
+        h1 {
+            font-size: 28pt;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 0.5em;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 18pt;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-top: 0.75em;
+            margin-bottom: 0.75em;
+            padding-bottom: 0.3em;
+            border-bottom: 2px solid var(--accent-gray);
+        }
+
+        h3 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: var(--primary-medium);
+            margin-top: 1.25em;
+            margin-bottom: 0.5em;
+        }
+
+        h4 {
+            font-size: 12pt;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-top: 1em;
+            margin-bottom: 0.4em;
+        }
+
+        p {
+            margin-bottom: 0.75em;
+            text-align: justify;
+        }
+
+        strong {
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+
+        /* ============================================
+           DOCUMENT HEADER
+           ============================================ */
+        .doc-header {
+            position: relative;
+            text-align: center;
+            padding: 2em 0;
+            border-bottom: 3px solid var(--primary-dark);
+            margin-bottom: 1.5em;
+        }
+
+        .doc-header h1 {
+            margin-bottom: 0.25em;
+        }
+
+        .doc-header .subtitle {
+            text-align: center;
+        }
+
+        .doc-meta {
+            display: flex;
+            justify-content: center;
+            gap: 2em;
+            margin-top: 1em;
+            font-size: 10pt;
+            color: var(--text-muted);
+        }
+
+        .doc-meta span {
+            padding: 0.3em 0.8em;
+            background: var(--light-gray);
+            border-radius: 4px;
+        }
+
+        /* ============================================
+           SECTION NUMBERING
+           ============================================ */
+        .section-number {
+            color: var(--accent-gray);
+            font-weight: 700;
+            margin-right: 0.5em;
+        }
+
+        /* ============================================
+           TABLES
+           ============================================ */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+            font-size: 9.5pt;
+        }
+
+        thead {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        th {
+            padding: 0.6em 0.8em;
+            text-align: left;
+            font-weight: 600;
+            font-size: 9pt;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        td {
+            padding: 0.5em 0.8em;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        tbody tr:nth-child(even) {
+            background: var(--code-bg);
+        }
+
+        tbody tr:hover {
+            background: var(--light-gray);
+        }
+
+        /* Compact tables */
+        table.compact td,
+        table.compact th {
+            padding: 0.4em 0.6em;
+            font-size: 9pt;
+        }
+
+        /* ============================================
+           IMAGES & DIAGRAMS
+           ============================================ */
+        .diagram-container {
+            margin: 1.5em 0;
+            text-align: center;
+        }
+
+        .diagram-container img {
+            max-width: 100%;
+            max-height: 4.5in;
+            height: auto;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .diagram-container.small img {
+            max-height: 3in;
+        }
+
+        .diagram-container.medium img {
+            max-height: 4in;
+        }
+
+        .diagram-caption {
+            margin-top: 0.75em;
+            font-size: 9pt;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* ============================================
+           CODE BLOCKS
+           ============================================ */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1em;
+            overflow-x: auto;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 9pt;
+            line-height: 1.5;
+            margin: 1em 0;
+        }
+
+        code {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 9pt;
+            background: var(--code-bg);
+            padding: 0.15em 0.4em;
+            border-radius: 3px;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        /* ============================================
+           LISTS
+           ============================================ */
+        ul, ol {
+            margin: 0.75em 0;
+            padding-left: 1.5em;
+        }
+
+        li {
+            margin-bottom: 0.3em;
+        }
+
+        li > ul, li > ol {
+            margin-top: 0.3em;
+            margin-bottom: 0;
+        }
+
+        /* ============================================
+           CALLOUT BOXES
+           ============================================ */
+        .callout {
+            padding: 1em 1.25em;
+            margin: 1em 0;
+            border-radius: 6px;
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+        }
+
+        .callout-info {
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+        }
+
+        .callout-success {
+            background: var(--light-gray);
+            border-left: 4px solid var(--accent-gray);
+        }
+
+        .callout-impact {
+            background: #f5f5f5;
+            border-left: 4px solid #888888;
+        }
+
+        .callout h4, .callout-title {
+            margin: 0 0 0.5em 0;
+            font-size: 10pt;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .callout p {
+            margin: 0;
+            font-size: 10pt;
+        }
+
+        /* ============================================
+           DECISION CARDS
+           ============================================ */
+        .card {
+            background: var(--background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25em;
+            margin: 1em 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .card h4 {
+            margin-top: 0;
+            color: var(--primary-dark);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 1em;
+            margin-bottom: 1em;
+            padding-bottom: 0.75em;
+            border-bottom: 2px solid var(--accent-gray);
+        }
+
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--primary-dark);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .card-title-block {
+            flex: 1;
+        }
+
+        .card-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+        }
+
+        .card-role {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .card-badge {
+            background: var(--accent-gray);
+            color: white;
+            padding: 0.25em 0.5em;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .card-section {
+            margin-bottom: 1em;
+        }
+
+        .card-section-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--primary-medium);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5em;
+        }
+
+        .card-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .card-list li {
+            position: relative;
+            padding-left: 1.5em;
+            margin-bottom: 0.25em;
+            font-size: 0.9rem;
+        }
+
+        .card-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-gray);
+            border-radius: 50%;
+        }
+
+        .trade-off-list li::before {
+            background: #888888;
+        }
+
+        /* ============================================
+           BADGES & TAGS
+           ============================================ */
+        .badge {
+            display: inline-block;
+            padding: 0.2em 0.6em;
+            font-size: 8pt;
+            font-weight: 600;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .badge-selected {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        .badge-rejected {
+            background: #888888;
+            color: white;
+        }
+
+        /* ============================================
+           TABLE OF CONTENTS
+           ============================================ */
+        .toc {
+            background: var(--code-bg);
+            padding: 1.5em;
+            border-radius: 8px;
+            margin: 1.5em 0;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            color: var(--primary-dark);
+        }
+
+        .toc ol {
+            columns: 2;
+            column-gap: 2em;
+            padding-left: 1.5em;
+        }
+
+        .toc li {
+            margin-bottom: 0.4em;
+            font-size: 10pt;
+        }
+
+        .toc a {
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            color: var(--accent-gray);
+        }
+
+        /* ============================================
+           EXECUTIVE SUMMARY
+           ============================================ */
+        .executive-summary {
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+            padding: 1.25em;
+            margin: 1.5em 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .executive-summary p {
+            font-size: 11pt;
+            line-height: 1.7;
+            margin-bottom: 0.5em;
+        }
+
+        .executive-summary p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* ============================================
+           ROADMAP SECTION
+           ============================================ */
+        .roadmap-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1em;
+            margin: 1em 0;
+        }
+
+        .roadmap-card {
+            background: var(--light-gray);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1em;
+        }
+
+        .roadmap-card h4 {
+            margin: 0 0 0.75em 0;
+            font-size: 10pt;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent-gray);
+        }
+
+        .roadmap-card ul {
+            margin: 0;
+            padding-left: 1.25em;
+            font-size: 9pt;
+        }
+
+        .roadmap-card li {
+            margin-bottom: 0.4em;
+        }
+
+        /* ============================================
+           PRINT STYLES
+           ============================================ */
+        @media print {
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+
+            body {
+                font-size: 10pt;
+            }
+
+            thead {
+                background: var(--primary-dark) !important;
+                -webkit-print-color-adjust: exact !important;
+            }
+
+            h2, h3, h4 {
+                page-break-after: avoid;
+                -webkit-page-break-after: avoid;
+                break-after: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============================================
+     DOCUMENT HEADER
+     ============================================ -->
+<div class="doc-header">
+    <h1>Architecture Decision Records</h1>
+    <p style="font-size: 14pt; color: var(--text-secondary); margin-bottom: 0.5em; text-align: center;">CJADC2 Orchestration Platform</p>
+    <div class="doc-meta">
+        <span><strong>Version:</strong> 1.0</span>
+        <span><strong>Author:</strong> John Sasser</span>
+        <span><strong>Status:</strong> Draft for Review</span>
+    </div>
+</div>
+
+<div class="toc">
+    <h3>Table of Contents</h3>
+    <ol>
+        <li><a href="#section-1">Executive Summary</a></li>
+        <li><a href="#section-2">Message Broker: NATS JetStream</a></li>
+        <li><a href="#section-3">Policy Engine: Open Policy Agent</a></li>
+        <li><a href="#section-4">Agent Implementation: Go</a></li>
+        <li><a href="#section-5">Persistence: PostgreSQL</a></li>
+        <li><a href="#section-6">Message Envelope Design</a></li>
+        <li><a href="#section-7">Idempotency Strategy</a></li>
+        <li><a href="#section-8">Human-in-the-Loop Enforcement</a></li>
+        <li><a href="#section-9">Proposal De-duplication Strategy</a></li>
+        <li><a href="#section-10">WebSocket Hub Architecture</a></li>
+        <li><a href="#section-11">Frontend State Management Pattern</a></li>
+        <li><a href="#section-12">Trade-off Summary</a></li>
+        <li><a href="#section-13">Future Roadmap</a></li>
+    </ol>
+</div>
+
+<!-- ============================================
+     Section 1: Executive Summary
+     ============================================ -->
+<h2 id="section-1"><span class="section-number">1.</span> Executive Summary</h2>
+
+<div class="executive-summary">
+    <p>This document captures the key technical decisions made during the design and implementation of the CJADC2 platform, including the rationale and trade-offs considered for each architectural choice.</p>
+    <p>Each decision follows an Architecture Decision Record (ADR) format: <strong>Decision</strong>, <strong>Rationale</strong>, and <strong>Trade-offs Accepted</strong>. This provides transparency into why specific technologies and patterns were selected over alternatives.</p>
+</div>
+
+<br>
+
+<!-- ============================================
+     Section 2: Message Broker
+     ============================================ -->
+<br>
+
+<h2 id="section-2"><span class="section-number">2.</span> Message Broker: NATS JetStream</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>Use NATS JetStream as the event streaming backbone instead of Apache Kafka or RabbitMQ.</p>
+</div>
+
+<div class="diagram-container medium">
+    <img src="images/broker-comparison.png" alt="Message Broker Technology Comparison">
+    <p class="diagram-caption">Figure 2.1: Message broker technology comparison and selection rationale</p>
+</div>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Alternative</th>
+            <th>Consideration</th>
+            <th>Outcome</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Apache Kafka</strong></td>
+            <td>Excels at extremely high throughput (millions of messages/second)</td>
+            <td><span class="badge badge-rejected">Rejected</span></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td colspan="2">Requires ZooKeeper/KRaft coordination, partition management, and careful tuning. Schema registry, offset management, and consumer groups add cognitive overhead. Overkill for MVP scope.</td>
+        </tr>
+        <tr>
+            <td><strong>RabbitMQ</strong></td>
+            <td>Excellent for traditional message queuing</td>
+            <td><span class="badge badge-rejected">Rejected</span></td>
+        </tr>
+        <tr>
+            <td></td>
+            <td colspan="2">Lacks native stream semantics and has limited replay capabilities compared to log-based systems. Would require additional infrastructure for event-sourcing patterns.</td>
+        </tr>
+        <tr>
+            <td><strong>NATS JetStream</strong></td>
+            <td>Single binary deployment with minimal configuration</td>
+            <td><span class="badge badge-selected">Selected</span></td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>NATS JetStream Advantages</h4>
+<ul>
+    <li>Native support for streams with replay, acknowledgments, and exactly-once delivery</li>
+    <li>Built-in subject-based routing matches hierarchical topic design (<code>detect.></code>, <code>track.></code>, etc.)</li>
+    <li>JetStream provides persistence with configurable retention policies</li>
+    <li>Work queue semantics for proposal stream ensures single-consumer processing</li>
+    <li>Excellent Go client with idiomatic API</li>
+    <li>Sub-millisecond latency suitable for real-time decision support</li>
+</ul>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Lower maximum throughput than Kafka (sufficient for use case)</li>
+    <li>Smaller ecosystem than Kafka (fewer connectors, but all producers/consumers controlled)</li>
+    <li>Less mature multi-datacenter replication (acceptable for MVP scope)</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 3: Policy Engine
+     ============================================ -->
+<br>
+
+<h2 id="section-3"><span class="section-number">3.</span> Policy Engine: Open Policy Agent</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>Use OPA for policy enforcement at every stage of the pipeline.</p>
+</div>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Benefit</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Separation of Concerns</strong></td>
+            <td>Policy logic externalized from application code; rules updated without redeploying agents</td>
+        </tr>
+        <tr>
+            <td><strong>Declarative Language</strong></td>
+            <td>Rego provides purpose-built language for authorization with readable, auditable policies</td>
+        </tr>
+        <tr>
+            <td><strong>Industry Standard</strong></td>
+            <td>Cloud-native policy enforcement with bundle-based deployment matching multi-policy structure</td>
+        </tr>
+        <tr>
+            <td><strong>Rich Response Format</strong></td>
+            <td>Supports deny reasons, warnings, and metadata in decision responses</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Policy Coverage</h4>
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Policy</th>
+            <th>Purpose</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Origin Attestation</strong></td>
+            <td>Validates message sources match expected patterns</td>
+        </tr>
+        <tr>
+            <td><strong>Data Handling</strong></td>
+            <td>Controls access based on classification levels</td>
+        </tr>
+        <tr>
+            <td><strong>Proposal Validation</strong></td>
+            <td>Ensures proposals meet requirements before human review</td>
+        </tr>
+        <tr>
+            <td><strong>Effect Release</strong></td>
+            <td>Enforces human approval chain for action execution</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Additional network hop for policy decisions (mitigated by local caching)</li>
+    <li>Rego learning curve for policy authors</li>
+    <li>Bundle synchronization complexity in multi-node deployments</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 4: Agent Implementation
+     ============================================ -->
+<br>
+
+<h2 id="section-4"><span class="section-number">4.</span> Agent Implementation: Go</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>Implement all agents in Go.</p>
+</div>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Benefit</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Performance</strong></td>
+            <td>Compiled language with minimal runtime overhead; efficient memory management</td>
+        </tr>
+        <tr>
+            <td><strong>Concurrency</strong></td>
+            <td>Native goroutines and channels match event-driven architecture patterns</td>
+        </tr>
+        <tr>
+            <td><strong>Operations</strong></td>
+            <td>Single static binary deployment; fast startup time; low memory footprint</td>
+        </tr>
+        <tr>
+            <td><strong>Ecosystem</strong></td>
+            <td>Excellent NATS client (nats.go), OpenTelemetry support, pgx driver, chi router</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Alternatives Considered</h4>
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Language</th>
+            <th>Consideration</th>
+            <th>Outcome</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Rust</strong></td>
+            <td>Steeper learning curve; Go's GC acceptable for latency requirements</td>
+            <td><span class="badge badge-rejected">Rejected</span></td>
+        </tr>
+        <tr>
+            <td><strong>Java/Kotlin</strong></td>
+            <td>JVM startup time impacts container scaling; higher memory baseline</td>
+            <td><span class="badge badge-rejected">Rejected</span></td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Less expressive than Rust for some patterns</li>
+    <li>Manual error handling (verbose but explicit)</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 5: Persistence
+     ============================================ -->
+<br>
+
+<h2 id="section-5"><span class="section-number">5.</span> Persistence: PostgreSQL</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>Use PostgreSQL as the primary database for state persistence.</p>
+</div>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Feature</th>
+            <th>Usage</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Reliability</strong></td>
+            <td>ACID transactions for multi-table updates; strong consistency for audit requirements</td>
+        </tr>
+        <tr>
+            <td><strong>JSONB Columns</strong></td>
+            <td>Flexible schema evolution for sources, metadata, and policy_result fields</td>
+        </tr>
+        <tr>
+            <td><strong>PostgreSQL Types</strong></td>
+            <td>UUID, TIMESTAMPTZ, ENUMs for type safety</td>
+        </tr>
+        <tr>
+            <td><strong>Views</strong></td>
+            <td>Denormalized query patterns (pending_proposals_queue)</td>
+        </tr>
+        <tr>
+            <td><strong>Triggers</strong></td>
+            <td>Automatic timestamp updates</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Alternatives Considered</h4>
+<ul>
+    <li><strong>NoSQL:</strong> Strong relationships between entities (tracks, proposals, decisions, effects) require transactional updates and JOIN-heavy audit queries</li>
+    <li><strong>Event Sourcing Only:</strong> Need materialized views for efficient queries; audit compliance requires durable, queryable records</li>
+</ul>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Schema migrations required for evolution</li>
+    <li>Single point of failure (mitigated by replication in production)</li>
+    <li>Write latency higher than pure event store</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 6: Message Envelope
+     ============================================ -->
+<br>
+
+<h2 id="section-6"><span class="section-number">6.</span> Message Envelope Design</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>All messages include a standardized envelope with identity, routing, timing, security, and tracing fields.</p>
+</div>
+
+<h3>Envelope Structure</h3>
+
+<pre><code>type Envelope struct {
+    MessageID     string    // UUIDv7 for time-ordering
+    CorrelationID string    // Chain tracking across agents
+    CausationID   string    // Parent message reference
+    Source        string    // Agent ID
+    SourceType    string    // Agent type
+    Timestamp     time.Time // Creation time
+    Signature     string    // HMAC-SHA256
+    PolicyVersion string    // OPA bundle version
+    TraceID       string    // OpenTelemetry trace
+    SpanID        string    // OpenTelemetry span
+}</code></pre>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Capability</th>
+            <th>Fields</th>
+            <th>Purpose</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Traceability</strong></td>
+            <td>CorrelationID, CausationID, TraceID/SpanID</td>
+            <td>Links messages from detection through effect; enables distributed tracing</td>
+        </tr>
+        <tr>
+            <td><strong>Security</strong></td>
+            <td>Signature, Source, SourceType, PolicyVersion</td>
+            <td>Message integrity verification; OPA origin attestation; policy replay</td>
+        </tr>
+        <tr>
+            <td><strong>Operability</strong></td>
+            <td>MessageID, Timestamp</td>
+            <td>Time-ordered UUIDs for debugging; authoritative creation time</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Message overhead (~200-300 bytes per message)</li>
+    <li>Signature computation adds latency (currently HMAC, not asymmetric)</li>
+    <li>PolicyVersion requires bundle version tracking</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 7: Idempotency
+     ============================================ -->
+<br>
+
+<h2 id="section-7"><span class="section-number">7.</span> Idempotency Strategy</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>Implement idempotency at the effect execution layer using database-enforced unique keys.</p>
+</div>
+
+<h3>Implementation</h3>
+
+<pre><code>-- Database constraint
+CREATE TABLE effects (
+    ...
+    idempotent_key VARCHAR(128) UNIQUE NOT NULL,
+    ...
+);
+
+-- Key computation
+SHA256(decision_id + proposal_id + action_type)</code></pre>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Approach</th>
+            <th>Benefit</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Database-Enforced</strong></td>
+            <td>Unique constraint guarantees exactly-once semantics even with race conditions; survives process restarts</td>
+        </tr>
+        <tr>
+            <td><strong>Effect Layer Only</strong></td>
+            <td>Effects have real-world consequences; upstream stages are idempotent transformations</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Alternative Considered</h4>
+<p><strong>NATS Deduplication:</strong> Rejected because effect execution confirmation must survive beyond the message dedup window. Database provides permanent record of execution status.</p>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Additional database write in the critical path</li>
+    <li>Requires cleanup of stale idempotency records (TTL-based)</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 8: Human-in-the-Loop
+     ============================================ -->
+<br>
+
+<h2 id="section-8"><span class="section-number">8.</span> Human-in-the-Loop Enforcement</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>All action proposals require explicit human approval with no automatic bypass.</p>
+</div>
+
+<h3>Implementation</h3>
+
+<pre><code># OPA Policy (effects/release.rego)
+require_human := true
+
+valid_approval_chain if {
+    input.decision.approved == true
+    input.decision.approved_by != ""
+    input.decision.approved_by != "system"  # Explicit block
+    input.decision.proposal_id == input.proposal.proposal_id
+}
+
+-- Database constraint
+approved_by VARCHAR(128) NOT NULL  -- Cannot be empty</code></pre>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Principle</th>
+            <th>Implementation</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Safety</strong></td>
+            <td>Prevents runaway automation in command and control context</td>
+        </tr>
+        <tr>
+            <td><strong>Auditability</strong></td>
+            <td>Every effect traces to identified human; denial decisions equally captured</td>
+        </tr>
+        <tr>
+            <td><strong>Design Philosophy</strong></td>
+            <td>System proposes, human disposes; final authority with trained operators</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Latency in the decision loop (intentional)</li>
+    <li>Cannot demonstrate fully autonomous operation</li>
+    <li>Operator workload in high-volume scenarios</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 9: Proposal De-duplication
+     ============================================ -->
+<br>
+
+<h2 id="section-9"><span class="section-number">9.</span> Proposal De-duplication Strategy</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>Consolidate multiple sensor hits on the same track into a single pending proposal using database-enforced unique constraints.</p>
+</div>
+
+<h3>Implementation</h3>
+
+<pre><code>-- Partial unique index ensures one pending proposal per track
+CREATE UNIQUE INDEX idx_proposals_track_pending_unique
+  ON proposals(track_id)
+  WHERE status = 'pending';
+
+-- Additional columns for hit tracking
+ALTER TABLE proposals ADD COLUMN hit_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE proposals ADD COLUMN last_hit_at TIMESTAMPTZ NOT NULL DEFAULT NOW();</code></pre>
+
+<h4>UPSERT Logic (Authorizer Agent)</h4>
+
+<pre><code>// If proposal exists for this track, UPDATE it
+// Otherwise, INSERT new one
+ON CONFLICT (track_id) WHERE status = 'pending'
+DO UPDATE SET
+  hit_count = proposals.hit_count + 1,
+  last_hit_at = NOW(),
+  priority = GREATEST(proposals.priority, EXCLUDED.priority)</code></pre>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Aspect</th>
+            <th>Benefit</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Problem Solved</strong></td>
+            <td>Without de-duplication, a single hostile aircraft generates 100+ proposals in minutes, cluttering operator UI</td>
+        </tr>
+        <tr>
+            <td><strong>Why Database-Enforced</strong></td>
+            <td>Partial unique index guarantees consistency under concurrent writes; no application-level locking required</td>
+        </tr>
+        <tr>
+            <td><strong>Why Track Hit Count</strong></td>
+            <td>Provides operational intelligence; higher hit counts correlate with higher confidence; UI can prioritize</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Additional database write per duplicate detection (UPSERT vs INSERT)</li>
+    <li>Slightly more complex query logic in Authorizer</li>
+    <li>Hit count not meaningful for single-detection proposals</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 10: WebSocket Hub Architecture
+     ============================================ -->
+<br>
+
+<h2 id="section-10"><span class="section-number">10.</span> WebSocket Hub Architecture</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>Implement a centralized pub/sub WebSocket hub that bridges NATS events to connected browser clients.</p>
+</div>
+
+<h3>Implementation</h3>
+
+<pre><code>type WebSocketHub struct {
+    clients    map[*Client]bool
+    broadcast  chan *Message
+    register   chan *Client
+    unregister chan *Client
+    subscriptions map[*Client]map[string]bool
+}</code></pre>
+
+<h4>Message Flow</h4>
+
+<pre><code>NATS JetStream → Hub.Subscribe() → Hub.broadcast → Client.send</code></pre>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Aspect</th>
+            <th>Benefit</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Why Centralized Hub</strong></td>
+            <td>Decouples WebSocket clients from direct NATS subscriptions; allows filtering and transformation</td>
+        </tr>
+        <tr>
+            <td><strong>Why Not Direct NATS WebSocket</strong></td>
+            <td>Browser clients expect JSON, not NATS wire format; hub allows message aggregation and rate limiting</td>
+        </tr>
+        <tr>
+            <td><strong>Subscription Model</strong></td>
+            <td>Clients can subscribe to specific message types; default receives ALL messages; dynamic subscribe/unsubscribe</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Additional memory for Hub state (client tracking)</li>
+    <li>Single broadcast channel could become bottleneck at scale</li>
+    <li>Not horizontally scalable without shared state (Redis pub/sub)</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 11: Frontend State Management
+     ============================================ -->
+<br>
+
+<h2 id="section-11"><span class="section-number">11.</span> Frontend State Management Pattern</h2>
+
+<div class="callout callout-info">
+    <h4>Decision</h4>
+    <p>Combine Zustand (UI state), TanStack React Query (server state), and WebSocket hook (real-time updates) for frontend architecture.</p>
+</div>
+
+<h3>Three-Layer Architecture</h3>
+
+<pre><code>+-------------+     +---------------+     +-------------+
+|   Zustand   |     | React Query   |     | WebSocket   |
+| (UI State)  |     | (Server State)|     | (Real-time) |
++-------------+     +---------------+     +-------------+
+       |                   |                    |
+       v                   v                    v
+   Modal open?         Tracks[]            Invalidate
+   Selected tab        Proposals[]         Query Cache
+   Filter state        Decisions[]</code></pre>
+
+<h4>Cache Invalidation Pattern</h4>
+
+<pre><code>// WebSocket receives new proposal
+onMessage('proposal.new', () => {
+  queryClient.invalidateQueries(['proposals'])
+})</code></pre>
+
+<h3>Rationale</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Aspect</th>
+            <th>Benefit</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Why Three Layers</strong></td>
+            <td>Zustand: lightweight, no boilerplate for UI state; React Query: caching, retry, deduplication; WebSocket: real-time without polling</td>
+        </tr>
+        <tr>
+            <td><strong>Why Invalidation over Direct Updates</strong></td>
+            <td>Simpler than manually merging WebSocket data with cache; query refetch ensures consistency; works with optimistic updates</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Trade-offs Accepted</h4>
+<ul>
+    <li>Additional network request on invalidation (vs direct cache update)</li>
+    <li>Three libraries to maintain</li>
+    <li>Learning curve for developers unfamiliar with React Query</li>
+</ul>
+
+<br>
+
+<!-- ============================================
+     Section 12: Trade-off Summary
+     ============================================ -->
+<br>
+
+<h2 id="section-12"><span class="section-number">12.</span> Trade-off Summary</h2>
+
+<div class="diagram-container">
+    <img src="images/trade-off-summary.png" alt="Trade-off Summary">
+    <p class="diagram-caption">Figure 9.1: Strategic trade-off decisions across the platform architecture</p>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Trade-off</th>
+            <th>Choice</th>
+            <th>Rationale</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Performance vs Durability</strong></td>
+            <td>Durability</td>
+            <td>JetStream file storage over memory-only; database writes in critical path; acceptable latency for decision support</td>
+        </tr>
+        <tr>
+            <td><strong>Simplicity vs Flexibility</strong></td>
+            <td>Balanced</td>
+            <td>Go over Rust (simpler, sufficient performance); PostgreSQL over event-only store; OPA for flexible policy management</td>
+        </tr>
+        <tr>
+            <td><strong>Autonomy vs Safety</strong></td>
+            <td>Safety</td>
+            <td>Mandatory human approval; no automatic effect execution; policy-enforced at multiple layers</td>
+        </tr>
+    </tbody>
+</table>
+
+<!-- ============================================
+     Section 13: Future Roadmap
+     ============================================ -->
+<h2 id="section-13"><span class="section-number">13.</span> Future Roadmap</h2>
+
+<h3>Recently Completed</h3>
+<ul>
+    <li><strong>Proposal de-duplication</strong> - Same-entity sensor hits consolidated into single proposals</li>
+    <li><strong>WebSocket hub architecture</strong> - Real-time updates to browser clients</li>
+    <li><strong>Sensor runtime configuration</strong> - HTTP API for dynamic sensor tuning</li>
+    <li><strong>Consumer resilience</strong> - Automatic NATS consumer recreation on failure</li>
+    <li><strong>Metrics dashboard</strong> - Real-time pipeline metrics and latency tracking</li>
+    <li><strong>Audit trail enhancements</strong> - Reason field and improved search</li>
+</ul>
+
+<div class="roadmap-grid">
+    <div class="roadmap-card">
+        <h4>Short Term</h4>
+        <ul>
+            <li>Asymmetric signature verification (Ed25519)</li>
+            <li>Proposal prioritization ML model</li>
+            <li>Grafana dashboards for operational metrics</li>
+            <li>WebSocket message compression</li>
+        </ul>
+    </div>
+    <div class="roadmap-card">
+        <h4>Medium Term</h4>
+        <ul>
+            <li>Multi-datacenter NATS clustering</li>
+            <li>PostgreSQL read replicas</li>
+            <li>Role-based access control in API gateway</li>
+            <li>Batch proposal review interface</li>
+            <li>mTLS for production NATS communication</li>
+        </ul>
+    </div>
+    <div class="roadmap-card">
+        <h4>Long Term</h4>
+        <ul>
+            <li>Edge deployment topology</li>
+            <li>Federated learning for classifier</li>
+            <li>Link 16 / VMF message formats</li>
+            <li>Formal verification of OPA policies</li>
+        </ul>
+    </div>
+</div>
+
+<div class="callout callout-impact">
+    <h4>References</h4>
+    <ul style="margin: 0.5em 0 0 1.25em; font-size: 10pt;">
+        <li><a href="https://docs.nats.io/nats-concepts/jetstream">NATS JetStream Documentation</a></li>
+        <li><a href="https://www.openpolicyagent.org/docs/latest/policy-language/">OPA Policy Language</a></li>
+        <li><a href="https://www.postgresql.org/docs/current/datatype-json.html">PostgreSQL JSONB</a></li>
+        <li><a href="https://opentelemetry.io/docs/instrumentation/go/">OpenTelemetry Go SDK</a></li>
+    </ul>
+</div>
+
+</body>
+</html>

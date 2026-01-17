@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Reference - CJADC2 Orchestration Platform</title>
+    <style>
+        /* ============================================
+           CSS VARIABLES - Monochrome Professional Theme
+           ============================================ */
+        :root {
+            --primary-dark: #1a1a1a;
+            --primary-medium: #333333;
+            --accent-gray: #555555;
+            --light-gray: #f5f5f5;
+            --medium-gray: #e5e5e5;
+            --text-primary: #1a1a1a;
+            --text-secondary: #444444;
+            --text-muted: #777777;
+            --border-color: #d0d0d0;
+            --background: #ffffff;
+            --code-bg: #f8f8f8;
+        }
+
+        /* ============================================
+           BASE STYLES
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            page-break-before: auto !important;
+            page-break-after: auto !important;
+            page-break-inside: auto !important;
+            break-before: auto !important;
+            break-after: auto !important;
+            break-inside: auto !important;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--background);
+            max-width: 7in;
+            margin: 0 auto;
+            padding: 2em 0;
+        }
+
+        /* ============================================
+           TYPOGRAPHY
+           ============================================ */
+        h1 {
+            font-size: 28pt;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 0.5em;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 18pt;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-top: 0.75em;
+            margin-bottom: 0.75em;
+            padding-bottom: 0.3em;
+            border-bottom: 2px solid var(--accent-gray);
+        }
+
+        h3 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: var(--primary-medium);
+            margin-top: 1.25em;
+            margin-bottom: 0.5em;
+        }
+
+        h4 {
+            font-size: 12pt;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-top: 1em;
+            margin-bottom: 0.4em;
+        }
+
+        p {
+            margin-bottom: 0.75em;
+            text-align: justify;
+        }
+
+        strong {
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+
+        /* ============================================
+           DOCUMENT HEADER
+           ============================================ */
+        .doc-header {
+            position: relative;
+            text-align: center;
+            padding: 2em 0;
+            border-bottom: 3px solid var(--primary-dark);
+            margin-bottom: 1.5em;
+        }
+
+        .doc-header h1 {
+            margin-bottom: 0.25em;
+        }
+
+        .doc-header .subtitle {
+            text-align: center;
+        }
+
+        .doc-meta {
+            display: flex;
+            justify-content: center;
+            gap: 2em;
+            margin-top: 1em;
+            font-size: 10pt;
+            color: var(--text-muted);
+        }
+
+        .doc-meta span {
+            padding: 0.3em 0.8em;
+            background: var(--light-gray);
+            border-radius: 4px;
+        }
+
+        /* ============================================
+           SECTION NUMBERING
+           ============================================ */
+        .section-number {
+            color: var(--accent-gray);
+            font-weight: 700;
+            margin-right: 0.5em;
+        }
+
+        /* ============================================
+           TABLES
+           ============================================ */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+            font-size: 9.5pt;
+        }
+
+        thead {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        th {
+            padding: 0.6em 0.8em;
+            text-align: left;
+            font-weight: 600;
+            font-size: 9pt;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        td {
+            padding: 0.5em 0.8em;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        tbody tr:nth-child(even) {
+            background: var(--code-bg);
+        }
+
+        tbody tr:hover {
+            background: var(--light-gray);
+        }
+
+        /* Compact tables */
+        table.compact td,
+        table.compact th {
+            padding: 0.4em 0.6em;
+            font-size: 9pt;
+        }
+
+        /* ============================================
+           IMAGES & DIAGRAMS
+           ============================================ */
+        .diagram-container {
+            margin: 1.5em 0;
+            text-align: center;
+        }
+
+        .diagram-container img {
+            max-width: 100%;
+            max-height: 4.5in;
+            height: auto;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .diagram-container.small img {
+            max-height: 3in;
+        }
+
+        .diagram-container.medium img {
+            max-height: 4in;
+        }
+
+        .diagram-caption {
+            margin-top: 0.75em;
+            font-size: 9pt;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* ============================================
+           CODE BLOCKS
+           ============================================ */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1em;
+            overflow-x: auto;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 9pt;
+            line-height: 1.5;
+            margin: 1em 0;
+        }
+
+        code {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 9pt;
+            background: var(--code-bg);
+            padding: 0.15em 0.4em;
+            border-radius: 3px;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        /* ============================================
+           LISTS
+           ============================================ */
+        ul, ol {
+            margin: 0.75em 0;
+            padding-left: 1.5em;
+        }
+
+        li {
+            margin-bottom: 0.3em;
+        }
+
+        li > ul, li > ol {
+            margin-top: 0.3em;
+            margin-bottom: 0;
+        }
+
+        /* ============================================
+           CALLOUT BOXES
+           ============================================ */
+        .callout {
+            padding: 1em 1.25em;
+            margin: 1em 0;
+            border-radius: 6px;
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+        }
+
+        .callout-info {
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+        }
+
+        .callout-warning {
+            background: #fafafa;
+            border-left: 4px solid #888888;
+        }
+
+        .callout h4, .callout-title {
+            margin: 0 0 0.5em 0;
+            font-size: 10pt;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .callout p {
+            margin: 0;
+            font-size: 10pt;
+        }
+
+        /* ============================================
+           API ENDPOINT STYLES
+           ============================================ */
+        .endpoint {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.75em 1em;
+            margin: 1em 0 0.5em 0;
+            display: flex;
+            align-items: center;
+            gap: 0.75em;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 0.25em 0.6em;
+            border-radius: 4px;
+            font-size: 9pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            min-width: 55px;
+            text-align: center;
+        }
+
+        .method-get {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        .method-post {
+            background: var(--accent-gray);
+            color: white;
+        }
+
+        .method-patch {
+            background: #666666;
+            color: white;
+        }
+
+        .endpoint-path {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 10pt;
+            color: var(--text-primary);
+        }
+
+        /* ============================================
+           TABLE OF CONTENTS
+           ============================================ */
+        .toc {
+            background: var(--code-bg);
+            padding: 1.5em;
+            border-radius: 8px;
+            margin: 1.5em 0;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            color: var(--primary-dark);
+        }
+
+        .toc ol {
+            columns: 2;
+            column-gap: 2em;
+            padding-left: 1.5em;
+        }
+
+        .toc li {
+            margin-bottom: 0.4em;
+            font-size: 10pt;
+        }
+
+        .toc a {
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            color: var(--accent-gray);
+        }
+
+        /* ============================================
+           EXECUTIVE SUMMARY
+           ============================================ */
+        .executive-summary {
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+            padding: 1.25em;
+            margin: 1.5em 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .executive-summary p {
+            font-size: 11pt;
+            line-height: 1.7;
+            margin-bottom: 0.5em;
+        }
+
+        .executive-summary p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* ============================================
+           PRINT STYLES
+           ============================================ */
+        @media print {
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+
+            body {
+                font-size: 10pt;
+            }
+
+            thead {
+                background: var(--primary-dark) !important;
+                -webkit-print-color-adjust: exact !important;
+            }
+
+            h2, h3, h4 {
+                page-break-after: avoid;
+                -webkit-page-break-after: avoid;
+                break-after: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============================================
+     DOCUMENT HEADER
+     ============================================ -->
+<div class="doc-header">
+    <h1>API Reference</h1>
+    <p style="font-size: 14pt; color: var(--text-secondary); margin-bottom: 0.5em; text-align: center;">CJADC2 Orchestration Platform</p>
+    <div class="doc-meta">
+        <span><strong>Version:</strong> 1.0</span>
+        <span><strong>Author:</strong> John Sasser</span>
+        <span><strong>Status:</strong> Draft for Review</span>
+    </div>
+</div>
+
+<div class="toc">
+    <h3>Table of Contents</h3>
+    <ol>
+        <li><a href="#section-1">Overview</a></li>
+        <li><a href="#section-2">REST API</a></li>
+        <li><a href="#section-3">WebSocket API</a></li>
+        <li><a href="#section-4">Error Handling</a></li>
+        <li><a href="#section-5">Pagination</a></li>
+        <li><a href="#appendix-a">Appendix: Error Codes</a></li>
+    </ol>
+</div>
+
+<!-- ============================================
+     Section 1: Overview
+     ============================================ -->
+<h2 id="section-1"><span class="section-number">1.</span> Overview</h2>
+
+<div class="executive-summary">
+    <p>The CJADC2 API Gateway provides REST and WebSocket interfaces for interacting with the orchestration platform. All REST endpoints follow standard HTTP conventions and return JSON responses. WebSocket connections enable real-time updates for track movements, proposals, and decisions.</p>
+    <p><strong>Base URL:</strong> <code>http://localhost:8080</code></p>
+</div>
+
+<div class="callout callout-warning">
+    <h4>Authentication Notice</h4>
+    <p>Authentication is not implemented in the MVP. All endpoints are currently open. Future implementation will support JWT Bearer tokens, API key authentication, and role-based access control.</p>
+</div>
+
+<div class="diagram-container medium">
+    <img src="images/api-architecture.png" alt="API Architecture">
+    <p class="diagram-caption">Figure 1.1: API Gateway architecture with connected services</p>
+</div>
+
+<br>
+
+<!-- ============================================
+     Section 2: REST API
+     ============================================ -->
+<br>
+
+<h2 id="section-2"><span class="section-number">2.</span> REST API</h2>
+
+<h3>Health Check</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/health</span>
+</div>
+
+<p>Check the health status of the API Gateway and its dependencies.</p>
+
+<pre><code>{
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "services": {
+    "nats": "connected",
+    "postgres": "connected",
+    "opa": "connected"
+  }
+}</code></pre>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Status Code</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>200</code></td>
+            <td>All services healthy</td>
+        </tr>
+        <tr>
+            <td><code>503</code></td>
+            <td>One or more services unhealthy</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Tracks</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/tracks</span>
+</div>
+
+<p>List all active tracks with optional filtering.</p>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>classification</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter: friendly, hostile, unknown, neutral</td>
+        </tr>
+        <tr>
+            <td><code>threat_level</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter: low, medium, high, critical, unknown</td>
+        </tr>
+        <tr>
+            <td><code>type</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter: aircraft, vessel, ground, missile, unknown</td>
+        </tr>
+        <tr>
+            <td><code>limit</code></td>
+            <td>int</td>
+            <td>100</td>
+            <td>Maximum results to return</td>
+        </tr>
+        <tr>
+            <td><code>offset</code></td>
+            <td>int</td>
+            <td>0</td>
+            <td>Pagination offset</td>
+        </tr>
+        <tr>
+            <td><code>since</code></td>
+            <td>datetime</td>
+            <td>60s ago</td>
+            <td>Only return tracks updated after this time (ISO 8601)</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="callout callout-info">
+    <h4>Note</h4>
+    <p>By default, tracks are filtered to only return those updated within the last 60 seconds. Specify an explicit <code>since</code> parameter to override this behavior.</p>
+</div>
+
+<h4>Response Example</h4>
+<pre><code>{
+  "tracks": [{
+    "track_id": "550e8400-e29b-41d4-a716-446655440000",
+    "external_track_id": "TRK-001",
+    "classification": "hostile",
+    "type": "aircraft",
+    "confidence": 0.85,
+    "position": { "lat": 34.0522, "lon": -118.2437, "alt": 10000 },
+    "velocity": { "speed": 250.5, "heading": 045.0 },
+    "threat_level": "high",
+    "state": "active",
+    "first_seen": "2024-01-15T10:00:00Z",
+    "last_updated": "2024-01-15T10:30:00Z",
+    "detection_count": 42,
+    "sources": ["sensor-001", "sensor-003"]
+  }],
+  "total": 1, "limit": 100, "offset": 0
+}</code></pre>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/tracks/:id</span>
+</div>
+
+<p>Get detailed information for a specific track including position history.</p>
+
+<h3>Proposals</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/proposals</span>
+</div>
+
+<p>List action proposals awaiting human decision.</p>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>status</code></td>
+            <td>string</td>
+            <td>pending</td>
+            <td>Filter: pending, approved, denied, expired</td>
+        </tr>
+        <tr>
+            <td><code>track_id</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter by track ID</td>
+        </tr>
+        <tr>
+            <td><code>action_type</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter: engage, track, identify, ignore, intercept, monitor</td>
+        </tr>
+        <tr>
+            <td><code>threat_level</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter by threat level</td>
+        </tr>
+        <tr>
+            <td><code>limit</code></td>
+            <td>int</td>
+            <td>50</td>
+            <td>Maximum results</td>
+        </tr>
+        <tr>
+            <td><code>offset</code></td>
+            <td>int</td>
+            <td>0</td>
+            <td>Pagination offset</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Response Example</h4>
+<pre><code>{
+  "proposals": [{
+    "proposal_id": "660e8400-e29b-41d4-a716-446655440001",
+    "track_id": "550e8400-e29b-41d4-a716-446655440000",
+    "action_type": "intercept",
+    "priority": 8,
+    "rationale": "High-threat hostile aircraft approaching restricted airspace.",
+    "threat_level": "high",
+    "status": "pending",
+    "hit_count": 3,
+    "last_hit_at": "2024-01-15T10:31:00Z",
+    "expires_at": "2024-01-15T10:35:00Z",
+    "created_at": "2024-01-15T10:30:00Z",
+    "track": {
+      "track_id": "550e8400-e29b-41d4-a716-446655440000",
+      "classification": "hostile",
+      "type": "aircraft",
+      "threat_level": "high",
+      "confidence": 0.85
+    }
+  }],
+  "total": 1, "limit": 50, "offset": 0
+}</code></pre>
+
+<div class="endpoint">
+    <span class="method method-post">POST</span>
+    <span class="endpoint-path">/api/v1/proposals/:id/decide</span>
+</div>
+
+<p>Make a decision (approve or deny) on an action proposal.</p>
+
+<h4>Request Body</h4>
+<pre><code>{
+  "approved": true,
+  "approved_by": "operator-001",
+  "reason": "Verified threat, proceeding with intercept.",
+  "conditions": ["Maintain safe distance", "Report on contact"]
+}</code></pre>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Field</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>approved</code></td>
+            <td>boolean</td>
+            <td>Yes</td>
+            <td>Whether to approve (true) or deny (false)</td>
+        </tr>
+        <tr>
+            <td><code>approved_by</code></td>
+            <td>string</td>
+            <td>Yes</td>
+            <td>Operator identifier</td>
+        </tr>
+        <tr>
+            <td><code>reason</code></td>
+            <td>string</td>
+            <td>Yes</td>
+            <td>Justification for the decision</td>
+        </tr>
+        <tr>
+            <td><code>conditions</code></td>
+            <td>string[]</td>
+            <td>No</td>
+            <td>Additional conditions (for approvals)</td>
+        </tr>
+    </tbody>
+</table>
+
+<h4>Response</h4>
+<pre><code>{
+  "decision_id": "770e8400-e29b-41d4-a716-446655440002",
+  "proposal_id": "660e8400-e29b-41d4-a716-446655440001",
+  "approved": true,
+  "approved_by": "operator-001",
+  "approved_at": "2024-01-15T10:32:00Z",
+  "reason": "Verified threat, proceeding with intercept.",
+  "conditions": ["Maintain safe distance", "Report on contact"]
+}</code></pre>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Status Code</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>200</code></td>
+            <td>Decision recorded</td>
+        </tr>
+        <tr>
+            <td><code>400</code></td>
+            <td>Invalid request (missing approved_by, approved field, etc.)</td>
+        </tr>
+        <tr>
+            <td><code>404</code></td>
+            <td>Proposal not found</td>
+        </tr>
+        <tr>
+            <td><code>409</code></td>
+            <td>Proposal already decided or expired</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Decisions</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/decisions</span>
+</div>
+
+<p>List human decisions with optional filters for <code>approved</code>, <code>approved_by</code>, and <code>since</code>.</p>
+
+<h3>Effects</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/effects</span>
+</div>
+
+<p>List executed effects. Filter by <code>status</code> (pending, executed, failed, simulated) and <code>action_type</code>.</p>
+
+<h3>Audit Trail</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/audit</span>
+</div>
+
+<p>List audit trail entries for compliance and forensic review.</p>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Default</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>limit</code></td>
+            <td>int</td>
+            <td>100</td>
+            <td>Maximum results to return</td>
+        </tr>
+        <tr>
+            <td><code>action_type</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter by action type</td>
+        </tr>
+        <tr>
+            <td><code>user_id</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter by user/operator ID</td>
+        </tr>
+        <tr>
+            <td><code>track_id</code></td>
+            <td>string</td>
+            <td>-</td>
+            <td>Filter by track ID</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Track History</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/tracks/:id/history</span>
+</div>
+
+<p>Get detection history for a specific track including position and confidence over time.</p>
+
+<h4>Response Example</h4>
+<pre><code>{
+  "track_id": "TRK-001",
+  "history": [
+    {
+      "timestamp": "2024-01-15T10:25:00Z",
+      "position": {"lat": 34.0500, "lon": -118.2400, "alt": 9500},
+      "confidence": 0.82
+    },
+    {
+      "timestamp": "2024-01-15T10:30:00Z",
+      "position": {"lat": 34.0522, "lon": -118.2437, "alt": 10000},
+      "confidence": 0.85
+    }
+  ]
+}</code></pre>
+
+<h3>System Metrics</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/metrics</span>
+</div>
+
+<p>Get aggregated system metrics including track counts, proposal status, and queue depths.</p>
+
+<h4>Response Example</h4>
+<pre><code>{
+  "active_tracks": 10,
+  "pending_proposals": 2,
+  "approved_decisions": 15,
+  "denied_decisions": 3,
+  "executed_effects": 12,
+  "messages_per_minute": 500,
+  "queue_depth": {
+    "detections": 5,
+    "tracks": 3,
+    "proposals": 2,
+    "decisions": 1
+  }
+}</code></pre>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/metrics/stages</span>
+</div>
+
+<p>Get per-stage pipeline metrics with latency percentiles.</p>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/metrics/latency</span>
+</div>
+
+<p>Get end-to-end latency metrics. Optional <code>window</code> parameter (e.g., 1m, 5m, 15m) defaults to 5m.</p>
+
+<h3>Classifier Configuration</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/api/v1/classifier/config</span>
+</div>
+
+<p>Get the current classifier configuration including classification and type weights.</p>
+
+<div class="endpoint">
+    <span class="method method-patch">PATCH</span>
+    <span class="endpoint-path">/api/v1/classifier/config</span>
+</div>
+
+<p>Update classifier configuration weights for classification or entity types.</p>
+
+<h3>Database Management</h3>
+
+<div class="endpoint">
+    <span class="method method-post">POST</span>
+    <span class="endpoint-path">/api/v1/clear</span>
+</div>
+
+<p>Clear all data from the database (for testing/development). <strong>Warning:</strong> This deletes all tracks, proposals, decisions, effects, and audit entries.</p>
+
+<h3>Prometheus Metrics</h3>
+
+<div class="endpoint">
+    <span class="method method-get">GET</span>
+    <span class="endpoint-path">/metrics</span>
+</div>
+
+<p>Prometheus-compatible metrics endpoint exposing request counts, latencies, and pipeline statistics.</p>
+
+<br>
+
+<!-- ============================================
+     Section 3: WebSocket API
+     ============================================ -->
+<br>
+
+<h2 id="section-3"><span class="section-number">3.</span> WebSocket API</h2>
+
+<p>Connect to <code>ws://localhost:8080/ws</code> for real-time updates. All messages use a standard envelope format:</p>
+
+<pre><code>{
+  "type": "message_type",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "data": { ... }
+}</code></pre>
+
+<h3>Server to Client Messages</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Message Type</th>
+            <th>Description</th>
+            <th>Trigger</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>track.new</code></td>
+            <td>New track first detected</td>
+            <td>Correlator output</td>
+        </tr>
+        <tr>
+            <td><code>track.update</code></td>
+            <td>Existing track position updated</td>
+            <td>Correlator output</td>
+        </tr>
+        <tr>
+            <td><code>proposal.new</code></td>
+            <td>New proposal created or updated with sensor hit</td>
+            <td>Planner output</td>
+        </tr>
+        <tr>
+            <td><code>decision.made</code></td>
+            <td>Human approved/denied proposal</td>
+            <td>Authorizer action</td>
+        </tr>
+        <tr>
+            <td><code>effect.executed</code></td>
+            <td>Effect successfully executed</td>
+            <td>Effector completion</td>
+        </tr>
+        <tr>
+            <td><code>metrics.update</code></td>
+            <td>Periodic system statistics</td>
+            <td>Every few seconds</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Client to Server Messages</h3>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Message Type</th>
+            <th>Description</th>
+            <th>Example</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>subscribe</code></td>
+            <td>Subscribe to message types</td>
+            <td><code>{"type":"subscribe","data":{"topics":["track.new","track.update","proposal.new","decision.made","metrics.update"]}}</code></td>
+        </tr>
+        <tr>
+            <td><code>unsubscribe</code></td>
+            <td>Unsubscribe from message types</td>
+            <td><code>{"type":"unsubscribe","data":{"topics":["track.update"]}}</code></td>
+        </tr>
+        <tr>
+            <td><code>ping</code></td>
+            <td>Keep-alive ping</td>
+            <td><code>{"type":"ping","timestamp":"..."}</code></td>
+        </tr>
+    </tbody>
+</table>
+
+<br>
+
+<!-- ============================================
+     Section 4: Error Handling
+     ============================================ -->
+<br>
+
+<h2 id="section-4"><span class="section-number">4.</span> Error Handling</h2>
+
+<p>All error responses follow a consistent format:</p>
+
+<pre><code>{
+  "error": {
+    "code": "PROPOSAL_NOT_FOUND",
+    "message": "Proposal with ID 660e8400-... not found",
+    "details": {
+      "proposal_id": "660e8400-e29b-41d4-a716-446655440001"
+    }
+  }
+}</code></pre>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>HTTP Status</th>
+            <th>Meaning</th>
+            <th>Common Causes</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>400</code></td>
+            <td>Bad Request</td>
+            <td>Validation error, missing field, invalid UUID</td>
+        </tr>
+        <tr>
+            <td><code>403</code></td>
+            <td>Forbidden</td>
+            <td>OPA policy denied the action</td>
+        </tr>
+        <tr>
+            <td><code>404</code></td>
+            <td>Not Found</td>
+            <td>Resource does not exist</td>
+        </tr>
+        <tr>
+            <td><code>409</code></td>
+            <td>Conflict</td>
+            <td>Proposal expired or already decided</td>
+        </tr>
+        <tr>
+            <td><code>500</code></td>
+            <td>Server Error</td>
+            <td>Database or message broker failure</td>
+        </tr>
+    </tbody>
+</table>
+
+<br>
+
+<!-- ============================================
+     Section 5: Pagination
+     ============================================ -->
+<br>
+
+<h2 id="section-5"><span class="section-number">5.</span> Pagination</h2>
+
+<p>List endpoints support pagination using <code>limit</code> and <code>offset</code> parameters.</p>
+
+<pre><code># Page 1
+curl "http://localhost:8080/api/v1/tracks?limit=50&offset=0"
+
+# Page 2
+curl "http://localhost:8080/api/v1/tracks?limit=50&offset=50"</code></pre>
+
+<p>Responses include pagination metadata:</p>
+
+<pre><code>{
+  "items": [...],
+  "total": 150,
+  "limit": 50,
+  "offset": 0,
+  "has_more": true
+}</code></pre>
+
+<!-- ============================================
+     Appendix A: Error Codes
+     ============================================ -->
+<h2 id="appendix-a"><span class="section-number">A.</span> Appendix: Error Codes</h2>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Code</th>
+            <th>HTTP</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>VALIDATION_ERROR</code></td>
+            <td>400</td>
+            <td>Request validation failed</td>
+        </tr>
+        <tr>
+            <td><code>MISSING_FIELD</code></td>
+            <td>400</td>
+            <td>Required field missing</td>
+        </tr>
+        <tr>
+            <td><code>INVALID_UUID</code></td>
+            <td>400</td>
+            <td>Invalid UUID format</td>
+        </tr>
+        <tr>
+            <td><code>TRACK_NOT_FOUND</code></td>
+            <td>404</td>
+            <td>Track does not exist</td>
+        </tr>
+        <tr>
+            <td><code>PROPOSAL_NOT_FOUND</code></td>
+            <td>404</td>
+            <td>Proposal does not exist</td>
+        </tr>
+        <tr>
+            <td><code>DECISION_NOT_FOUND</code></td>
+            <td>404</td>
+            <td>Decision does not exist</td>
+        </tr>
+        <tr>
+            <td><code>EFFECT_NOT_FOUND</code></td>
+            <td>404</td>
+            <td>Effect does not exist</td>
+        </tr>
+        <tr>
+            <td><code>PROPOSAL_EXPIRED</code></td>
+            <td>409</td>
+            <td>Proposal has expired</td>
+        </tr>
+        <tr>
+            <td><code>PROPOSAL_ALREADY_DECIDED</code></td>
+            <td>409</td>
+            <td>Proposal already has a decision</td>
+        </tr>
+        <tr>
+            <td><code>POLICY_DENIED</code></td>
+            <td>403</td>
+            <td>OPA policy denied the action</td>
+        </tr>
+        <tr>
+            <td><code>DATABASE_ERROR</code></td>
+            <td>500</td>
+            <td>Database operation failed</td>
+        </tr>
+        <tr>
+            <td><code>NATS_ERROR</code></td>
+            <td>500</td>
+            <td>Message broker error</td>
+        </tr>
+    </tbody>
+</table>
+
+</body>
+</html>

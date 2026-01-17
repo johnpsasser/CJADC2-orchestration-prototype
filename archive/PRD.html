@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Technical PRD - CJADC2 Orchestration Platform</title>
+    <style>
+        /* ============================================
+           CSS VARIABLES - Monochrome Professional Theme
+           ============================================ */
+        :root {
+            --primary-dark: #1a1a1a;
+            --primary-medium: #333333;
+            --accent-gray: #555555;
+            --light-gray: #f5f5f5;
+            --medium-gray: #e5e5e5;
+            --text-primary: #1a1a1a;
+            --text-secondary: #444444;
+            --text-muted: #777777;
+            --border-color: #d0d0d0;
+            --background: #ffffff;
+            --code-bg: #f8f8f8;
+        }
+
+        /* ============================================
+           BASE STYLES
+           ============================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            page-break-before: auto !important;
+            page-break-after: auto !important;
+            page-break-inside: auto !important;
+            break-before: auto !important;
+            break-after: auto !important;
+            break-inside: auto !important;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--background);
+            max-width: 7in;
+            margin: 0 auto;
+            padding: 2em 0;
+        }
+
+        /* ============================================
+           TYPOGRAPHY
+           ============================================ */
+        h1 {
+            font-size: 28pt;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 0.5em;
+            letter-spacing: -0.02em;
+        }
+
+        h2 {
+            font-size: 18pt;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-top: 0.75em;
+            margin-bottom: 0.75em;
+            padding-bottom: 0.3em;
+            border-bottom: 2px solid var(--accent-gray);
+        }
+
+        h3 {
+            font-size: 14pt;
+            font-weight: 600;
+            color: var(--primary-medium);
+            margin-top: 1.25em;
+            margin-bottom: 0.5em;
+        }
+
+        h4 {
+            font-size: 12pt;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-top: 1em;
+            margin-bottom: 0.4em;
+        }
+
+        p {
+            margin-bottom: 0.75em;
+            text-align: justify;
+        }
+
+        strong {
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+
+        /* ============================================
+           DOCUMENT HEADER
+           ============================================ */
+        .doc-header {
+            position: relative;
+            text-align: center;
+            padding: 2em 0;
+            border-bottom: 3px solid var(--primary-dark);
+            margin-bottom: 1.5em;
+        }
+
+        .doc-header h1 {
+            margin-bottom: 0.25em;
+        }
+
+        .doc-header .subtitle {
+            text-align: center;
+        }
+
+        .doc-meta {
+            display: flex;
+            justify-content: center;
+            gap: 2em;
+            margin-top: 1em;
+            font-size: 10pt;
+            color: var(--text-muted);
+        }
+
+        .doc-meta span {
+            padding: 0.3em 0.8em;
+            background: var(--light-gray);
+            border-radius: 4px;
+        }
+
+        /* ============================================
+           SECTION NUMBERING
+           ============================================ */
+        .section-number {
+            color: var(--accent-gray);
+            font-weight: 700;
+            margin-right: 0.5em;
+        }
+
+        /* ============================================
+           TABLES
+           ============================================ */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1em 0;
+            font-size: 9.5pt;
+        }
+
+        thead {
+            background: var(--primary-dark);
+            color: white;
+        }
+
+        th {
+            padding: 0.6em 0.8em;
+            text-align: left;
+            font-weight: 600;
+            font-size: 9pt;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        td {
+            padding: 0.5em 0.8em;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+        }
+
+        tbody tr:nth-child(even) {
+            background: var(--code-bg);
+        }
+
+        tbody tr:hover {
+            background: var(--light-gray);
+        }
+
+        /* Compact tables */
+        table.compact td,
+        table.compact th {
+            padding: 0.4em 0.6em;
+            font-size: 9pt;
+        }
+
+        /* ============================================
+           IMAGES & DIAGRAMS
+           ============================================ */
+        .diagram-container {
+            margin: 1.5em 0;
+            text-align: center;
+        }
+
+        .diagram-container img {
+            max-width: 100%;
+            max-height: 4.5in;
+            height: auto;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .diagram-container.small img {
+            max-height: 3in;
+        }
+
+        .diagram-container.medium img {
+            max-height: 4in;
+        }
+
+        .diagram-caption {
+            margin-top: 0.75em;
+            font-size: 9pt;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        /* ============================================
+           CODE BLOCKS
+           ============================================ */
+        pre {
+            background: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1em;
+            overflow-x: auto;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 9pt;
+            line-height: 1.5;
+            margin: 1em 0;
+        }
+
+        code {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 9pt;
+            background: var(--code-bg);
+            padding: 0.15em 0.4em;
+            border-radius: 3px;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+        }
+
+        /* ============================================
+           LISTS
+           ============================================ */
+        ul, ol {
+            margin: 0.75em 0;
+            padding-left: 1.5em;
+        }
+
+        li {
+            margin-bottom: 0.3em;
+        }
+
+        li > ul, li > ol {
+            margin-top: 0.3em;
+            margin-bottom: 0;
+        }
+
+        /* ============================================
+           CALLOUT BOXES
+           ============================================ */
+        .callout {
+            padding: 1em 1.25em;
+            margin: 1em 0;
+            border-radius: 6px;
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+        }
+
+        .callout-info {
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+        }
+
+        .callout-success {
+            background: var(--light-gray);
+            border-left: 4px solid var(--accent-gray);
+        }
+
+        .callout-impact {
+            background: #f5f5f5;
+            border-left: 4px solid #888888;
+        }
+
+        .callout h4, .callout-title {
+            margin: 0 0 0.5em 0;
+            font-size: 10pt;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .callout p {
+            margin: 0;
+            font-size: 10pt;
+        }
+
+        /* ============================================
+           SECTION CARDS
+           ============================================ */
+        .card {
+            background: var(--background);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25em;
+            margin: 1em 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .card h4 {
+            margin-top: 0;
+            color: var(--primary-dark);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 1em;
+            margin-bottom: 1em;
+            padding-bottom: 0.75em;
+            border-bottom: 2px solid var(--accent-gray);
+        }
+
+        .card-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--primary-dark);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .card-title-block {
+            flex: 1;
+        }
+
+        .card-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+        }
+
+        .card-role {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .card-badge {
+            background: var(--accent-gray);
+            color: white;
+            padding: 0.25em 0.5em;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .card-section {
+            margin-bottom: 1em;
+        }
+
+        .card-section-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--primary-medium);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5em;
+        }
+
+        .card-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .card-list li {
+            position: relative;
+            padding-left: 1.5em;
+            margin-bottom: 0.25em;
+            font-size: 0.9rem;
+        }
+
+        .card-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-gray);
+            border-radius: 50%;
+        }
+
+        .success-criteria {
+            background: var(--light-gray);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.5em 1em;
+        }
+
+        .success-criteria li::before {
+            background: var(--primary-dark);
+        }
+
+        /* ============================================
+           BADGES & TAGS
+           ============================================ */
+        .badge {
+            display: inline-block;
+            padding: 0.2em 0.6em;
+            font-size: 8pt;
+            font-weight: 600;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        /* Priority Tags */
+        .priority {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .priority-p0 {
+            background: #1a1a1a;
+            color: white;
+        }
+
+        .priority-p1 {
+            background: #555555;
+            color: white;
+        }
+
+        .priority-p2 {
+            background: #888888;
+            color: white;
+        }
+
+        /* Status Tags */
+        .status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .status-available {
+            background: #e5e5e5;
+            color: #333333;
+        }
+
+        .status-pending {
+            background: #f0f0f0;
+            color: #555555;
+        }
+
+        .status-ready {
+            background: #e5e5e5;
+            color: #333333;
+        }
+
+        /* ============================================
+           GLOSSARY
+           ============================================ */
+        .glossary-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5em;
+        }
+
+        .glossary-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25em;
+            padding: 0.5em 0.75em;
+            background: var(--light-gray);
+            border-radius: 4px;
+        }
+
+        .glossary-term {
+            font-weight: 700;
+            color: var(--primary-dark);
+            font-size: 0.9rem;
+        }
+
+        .glossary-def {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        /* ============================================
+           METRICS GRID
+           ============================================ */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1em;
+            margin: 1em 0;
+        }
+
+        .metric-card {
+            background: var(--light-gray);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1em;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+            line-height: 1;
+        }
+
+        .metric-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.25em;
+        }
+
+        .metric-target {
+            font-size: 0.75rem;
+            color: var(--accent-gray);
+            margin-top: 0.25em;
+        }
+
+        /* ============================================
+           TABLE OF CONTENTS
+           ============================================ */
+        .toc {
+            background: var(--code-bg);
+            padding: 1.5em;
+            border-radius: 8px;
+            margin: 1.5em 0;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            color: var(--primary-dark);
+        }
+
+        .toc ol {
+            columns: 2;
+            column-gap: 2em;
+            padding-left: 1.5em;
+        }
+
+        .toc li {
+            margin-bottom: 0.4em;
+            font-size: 10pt;
+        }
+
+        .toc a {
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            color: var(--accent-gray);
+        }
+
+        /* ============================================
+           EXECUTIVE SUMMARY
+           ============================================ */
+        .executive-summary {
+            background: var(--light-gray);
+            border-left: 4px solid var(--primary-dark);
+            padding: 1.25em;
+            margin: 1.5em 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .executive-summary p {
+            font-size: 11pt;
+            line-height: 1.7;
+            margin-bottom: 0.5em;
+        }
+
+        .executive-summary p:last-child {
+            margin-bottom: 0;
+        }
+
+        /* ============================================
+           PRINT STYLES
+           ============================================ */
+        @media print {
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+
+            body {
+                font-size: 10pt;
+            }
+
+            thead {
+                background: var(--primary-dark) !important;
+                -webkit-print-color-adjust: exact !important;
+            }
+
+            h2, h3, h4 {
+                page-break-after: avoid;
+                -webkit-page-break-after: avoid;
+                break-after: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============================================
+     DOCUMENT HEADER
+     ============================================ -->
+<div class="doc-header">
+    <h1>Technical Product Requirements</h1>
+    <p style="font-size: 14pt; color: var(--text-secondary); margin-bottom: 0.5em; text-align: center;">CJADC2 Orchestration Platform</p>
+    <div class="doc-meta">
+        <span><strong>Version:</strong> 1.0</span>
+        <span><strong>Author:</strong> John Sasser</span>
+        <span><strong>Status:</strong> Draft for Review</span>
+    </div>
+</div>
+
+<div class="toc">
+    <h3>Table of Contents</h3>
+    <ol>
+        <li><a href="#section-1">Executive Summary</a></li>
+        <li><a href="#section-2">Goals and Non-Goals</a></li>
+        <li><a href="#section-3">Target Users</a></li>
+        <li><a href="#section-4">Key Performance Indicators</a></li>
+        <li><a href="#section-5">System Architecture</a></li>
+        <li><a href="#section-6">Safety &amp; Threat Model</a></li>
+        <li><a href="#section-7">Success Criteria</a></li>
+        <li><a href="#appendix-a">Appendix: Glossary</a></li>
+    </ol>
+</div>
+
+<!-- ============================================
+     Section 1: Executive Summary
+     ============================================ -->
+<h2 id="section-1"><span class="section-number">1.</span> Executive Summary</h2>
+
+<div class="executive-summary">
+    <p>The CJADC2 (Combined Joint All-Domain Command and Control) Machine-to-Machine Orchestration Platform is an MVP event-driven system designed to accelerate complex mission decision chains. The platform coordinates six autonomous agents through a secure messaging backbone, treating <strong>"Sensor Data as a Product"</strong> while maintaining strict human-in-the-loop approval for all effects.</p>
+    <p><strong>Mission Chain:</strong> Sensor &rarr; Classify &rarr; Correlate &rarr; Plan &rarr; Request-Approval &rarr; Dispatch</p>
+</div>
+
+<!-- ============================================
+     Section 2: Goals and Non-Goals
+     ============================================ -->
+<h2 id="section-2"><span class="section-number">2.</span> Goals and Non-Goals</h2>
+
+<h3>Goals</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Priority</th>
+            <th>Goal</th>
+            <th>Success Criteria</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><span class="priority priority-p0">P0</span></td>
+            <td><strong>End-to-End Orchestration</strong></td>
+            <td>Demonstrate full event-driven pipeline from sensor detection to effect execution</td>
+        </tr>
+        <tr>
+            <td><span class="priority priority-p0">P0</span></td>
+            <td><strong>Human-in-the-Loop</strong></td>
+            <td>Enforce human approval for 100% of proposed actions before execution</td>
+        </tr>
+        <tr>
+            <td><span class="priority priority-p0">P0</span></td>
+            <td><strong>Policy Enforcement</strong></td>
+            <td>OPA/Rego evaluation at every pipeline stage with 100% coverage</td>
+        </tr>
+        <tr>
+            <td><span class="priority priority-p1">P1</span></td>
+            <td><strong>Sub-3s Latency</strong></td>
+            <td>Detection-to-decision latency &lt; 3 seconds (p95) on commodity hardware</td>
+        </tr>
+        <tr>
+            <td><span class="priority priority-p1">P1</span></td>
+            <td><strong>At-Least-Once Delivery</strong></td>
+            <td>Message delivery with idempotent handlers via NATS JetStream</td>
+        </tr>
+        <tr>
+            <td><span class="priority priority-p2">P2</span></td>
+            <td><strong>Full Observability</strong></td>
+            <td>Correlation IDs, Prometheus metrics, and distributed tracing end-to-end</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Non-Goals</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Excluded</th>
+            <th>Rationale</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Real-world sensor/targeting integration</td>
+            <td>MVP uses synthetic data only; no connection to operational systems</td>
+        </tr>
+        <tr>
+            <td>Production HA/DR</td>
+            <td>Focus on functional demonstration, not operational resilience</td>
+        </tr>
+        <tr>
+            <td>Multi-tenant RBAC</td>
+            <td>Single-tenant with HIL approval is sufficient for MVP scope</td>
+        </tr>
+        <tr>
+            <td>ML pipelines or streaming analytics</td>
+            <td>Out of scope for initial platform demonstration</td>
+        </tr>
+    </tbody>
+</table>
+
+<br>
+
+<!-- ============================================
+     Section 3: Target Users
+     ============================================ -->
+<h2 id="section-3"><span class="section-number">3.</span> Target Users</h2>
+
+<!-- Persona 1: Mission Operator -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-icon">&#128101;</div>
+        <div class="card-title-block">
+            <div class="card-name">Mission Operator</div>
+            <div class="card-role">Monitors decision chain and approves/denies proposed actions</div>
+        </div>
+        <span class="card-badge">PRIMARY</span>
+    </div>
+
+    <div class="card-section">
+        <div class="card-section-title">Needs</div>
+        <ul class="card-list">
+            <li>Clear UI for action review and approval workflow</li>
+            <li>Real-time situational awareness dashboard</li>
+            <li>Audit trail visibility for all decisions</li>
+        </ul>
+    </div>
+
+    <div class="card-section">
+        <div class="card-section-title">Success Criteria</div>
+        <ul class="card-list success-criteria">
+            <li>All effects blocked without explicit human approval</li>
+            <li>Correlation IDs trace any event end-to-end</li>
+        </ul>
+    </div>
+</div>
+
+<!-- Persona 2: System Integrator -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-icon">&#128736;</div>
+        <div class="card-title-block">
+            <div class="card-name">System Integrator</div>
+            <div class="card-role">Deploys, configures, and extends the platform</div>
+        </div>
+        <span class="card-badge">TECHNICAL</span>
+    </div>
+
+    <div class="card-section">
+        <div class="card-section-title">Needs</div>
+        <ul class="card-list">
+            <li>Comprehensive API documentation</li>
+            <li>Extensible agent architecture</li>
+            <li>Configuration management via environment variables</li>
+        </ul>
+    </div>
+
+    <div class="card-section">
+        <div class="card-section-title">Success Criteria</div>
+        <ul class="card-list success-criteria">
+            <li>New agents can be added following BaseAgent pattern</li>
+            <li>Prometheus metrics available for all agents</li>
+        </ul>
+    </div>
+</div>
+
+<br>
+
+<!-- ============================================
+     Section 4: Key Performance Indicators
+     ============================================ -->
+<h2 id="section-4"><span class="section-number">4.</span> Key Performance Indicators</h2>
+
+<div class="metrics-grid">
+    <div class="metric-card">
+        <div class="metric-value">&lt; 1.5s</div>
+        <div class="metric-label">Detection-to-Decision</div>
+        <div class="metric-target">p50 latency</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-value">&lt; 3.0s</div>
+        <div class="metric-label">Detection-to-Decision</div>
+        <div class="metric-target">p95 latency</div>
+    </div>
+    <div class="metric-card">
+        <div class="metric-value">&ge; 1K</div>
+        <div class="metric-label">Messages/Minute</div>
+        <div class="metric-target">Throughput target</div>
+    </div>
+</div>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Metric</th>
+            <th>Target</th>
+            <th>Measurement</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Latency</strong></td>
+            <td>End-to-End (p95)</td>
+            <td>&lt; 5.0s</td>
+            <td>Sensor emission to Effector execution (excluding HIL wait)</td>
+        </tr>
+        <tr>
+            <td><strong>Throughput</strong></td>
+            <td>Concurrent Tracks</td>
+            <td>&ge; 100</td>
+            <td>Active tracks in correlation window</td>
+        </tr>
+        <tr>
+            <td><strong>Throughput</strong></td>
+            <td>Proposal Queue</td>
+            <td>&ge; 50</td>
+            <td>Pending HIL approvals</td>
+        </tr>
+        <tr>
+            <td><strong>Reliability</strong></td>
+            <td>Message Delivery</td>
+            <td>At-least-once</td>
+            <td>NATS JetStream store-and-forward</td>
+        </tr>
+        <tr>
+            <td><strong>Reliability</strong></td>
+            <td>Handler Idempotency</td>
+            <td>100%</td>
+            <td>Duplicate messages produce identical outcomes</td>
+        </tr>
+        <tr>
+            <td><strong>Coverage</strong></td>
+            <td>Policy Evaluation</td>
+            <td>100%</td>
+            <td>Every message evaluated against OPA policies</td>
+        </tr>
+    </tbody>
+</table>
+
+<br>
+
+<!-- ============================================
+     Section 5: System Architecture
+     ============================================ -->
+<h2 id="section-5"><span class="section-number">5.</span> System Architecture</h2>
+
+<h3>Technology Stack</h3>
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Component</th>
+            <th>Technology</th>
+            <th>Purpose</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Messaging</strong></td>
+            <td>NATS JetStream + mTLS</td>
+            <td>Secure, persistent pub/sub messaging</td>
+        </tr>
+        <tr>
+            <td><strong>Policy Engine</strong></td>
+            <td>OPA/Rego</td>
+            <td>Declarative policy enforcement</td>
+        </tr>
+        <tr>
+            <td><strong>Persistence</strong></td>
+            <td>PostgreSQL</td>
+            <td>Event store, track state, audit log</td>
+        </tr>
+        <tr>
+            <td><strong>Agents</strong></td>
+            <td>Go</td>
+            <td>High-performance event processors</td>
+        </tr>
+        <tr>
+            <td><strong>UI</strong></td>
+            <td>React + WebSocket</td>
+            <td>Real-time operator dashboard</td>
+        </tr>
+        <tr>
+            <td><strong>Observability</strong></td>
+            <td>Prometheus + OpenTelemetry</td>
+            <td>Metrics, tracing, alerting</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Agent Pipeline</h3>
+
+<div class="diagram-container">
+    <img src="images/agent-pipeline.png" alt="Agent Pipeline Architecture">
+    <p class="diagram-caption">Figure 5.1: Event-driven agent pipeline with Human-in-the-Loop approval gate</p>
+</div>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Agent</th>
+            <th>Input</th>
+            <th>Output</th>
+            <th>Responsibility</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Sensor Sim</strong></td>
+            <td>Timer/Config</td>
+            <td>Detection Event</td>
+            <td>Emit synthetic detections with random tracks and confidence scores</td>
+        </tr>
+        <tr>
+            <td><strong>Classifier</strong></td>
+            <td>Detection</td>
+            <td>Track Event</td>
+            <td>Enrich detections with type classification and confidence updates</td>
+        </tr>
+        <tr>
+            <td><strong>Correlator</strong></td>
+            <td>Track Event</td>
+            <td>Correlated Track</td>
+            <td>Deduplicate and merge tracks within 10-second windows</td>
+        </tr>
+        <tr>
+            <td><strong>Planner</strong></td>
+            <td>Correlated Track</td>
+            <td>ActionProposal</td>
+            <td>Generate proposed responses based on track characteristics</td>
+        </tr>
+        <tr>
+            <td><strong>Authorizer</strong></td>
+            <td>ActionProposal</td>
+            <td>Approved Action</td>
+            <td>Present proposals for human approval/denial via UI</td>
+        </tr>
+        <tr>
+            <td><strong>Effector</strong></td>
+            <td>Approved Action</td>
+            <td>Effect Log</td>
+            <td>Execute simulated effects and log state transitions</td>
+        </tr>
+    </tbody>
+</table>
+
+<br>
+
+<!-- ============================================
+     Section 6: Safety & Threat Model
+     ============================================ -->
+<h2 id="section-6"><span class="section-number">6.</span> Safety &amp; Threat Model</h2>
+
+<h3>Safety Constraints</h3>
+<div class="callout callout-info">
+    <h4>Safety Invariants</h4>
+    <ul style="margin: 0.5em 0 0 1.25em; font-size: 10pt;">
+        <li><strong>No ActionProposal proceeds to Effector without explicit human approval</strong></li>
+        <li>All effects are simulated and produce only log entries and state transitions</li>
+        <li>Correlation IDs trace every event from sensor to effect for auditability</li>
+        <li>Policy violations halt processing and generate alerts</li>
+    </ul>
+</div>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Constraint</th>
+            <th>Implementation</th>
+            <th>Rationale</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Synthetic Data Only</strong></td>
+            <td>All sensor data is randomly generated</td>
+            <td>No connection to real-world systems</td>
+        </tr>
+        <tr>
+            <td><strong>No Real-World Targeting</strong></td>
+            <td>Effects are log-only simulations</td>
+            <td>Platform has no external system integration</td>
+        </tr>
+        <tr>
+            <td><strong>Human-in-the-Loop Required</strong></td>
+            <td>Authorizer blocks until operator approval</td>
+            <td>No autonomous effect execution permitted</td>
+        </tr>
+        <tr>
+            <td><strong>Full Audit Trail</strong></td>
+            <td>All decisions logged with correlation IDs</td>
+            <td>Complete traceability for review</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Threat Mitigations</h3>
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Threat Category</th>
+            <th>Mitigation</th>
+            <th>MVP Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Message Tampering</strong></td>
+            <td>mTLS encryption for all NATS communication</td>
+            <td>&#9888;&#65039; Deferred (non-goal NG2)</td>
+        </tr>
+        <tr>
+            <td><strong>Unauthorized Access</strong></td>
+            <td>Certificate-based authentication for agents</td>
+            <td>&#9888;&#65039; Using HMAC signing instead</td>
+        </tr>
+        <tr>
+            <td><strong>Policy Bypass</strong></td>
+            <td>Mandatory OPA evaluation at each pipeline stage</td>
+            <td>&#9989; Implemented</td>
+        </tr>
+        <tr>
+            <td><strong>Replay Attacks</strong></td>
+            <td>Idempotent handlers with deduplication keys</td>
+            <td>&#9989; Implemented</td>
+        </tr>
+        <tr>
+            <td><strong>Audit Evasion</strong></td>
+            <td>Immutable PostgreSQL audit log with correlation IDs</td>
+            <td>&#9989; Implemented</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="callout callout-info" style="margin-top: 1em;">
+    <p><strong>Note:</strong> mTLS and certificate-based authentication are deferred per non-goal NG2 (production-grade HA). The MVP uses HMAC-SHA256 message signing for integrity verification.</p>
+</div>
+
+<br>
+
+<!-- ============================================
+     Section 7: Success Criteria
+     ============================================ -->
+<h2 id="section-7"><span class="section-number">7.</span> Success Criteria</h2>
+
+<h3>MVP Acceptance</h3>
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Status</th>
+            <th>Criterion</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>&#9989;</td>
+            <td>Full pipeline executes from Sensor Sim to Effector with HIL approval</td>
+        </tr>
+        <tr>
+            <td>&#9989;</td>
+            <td>Detection-to-decision p95 latency &lt; 3 seconds on laptop</td>
+        </tr>
+        <tr>
+            <td>&#9989;</td>
+            <td>Sustained throughput &ge; 1,000 messages/minute</td>
+        </tr>
+        <tr>
+            <td>&#9989;</td>
+            <td>All effects blocked without human approval</td>
+        </tr>
+        <tr>
+            <td>&#9989;</td>
+            <td>Correlation IDs trace end-to-end for any event</td>
+        </tr>
+        <tr>
+            <td>&#9989;</td>
+            <td>Prometheus metrics available for all agents</td>
+        </tr>
+        <tr>
+            <td>&#9989;</td>
+            <td>Policy enforcement demonstrated at each stage</td>
+        </tr>
+    </tbody>
+</table>
+
+<div class="callout callout-success" style="margin-top: 1em;">
+    <p><strong>Status:</strong> All MVP acceptance criteria have been met. The platform successfully demonstrates end-to-end event-driven orchestration with human-in-the-loop approval.</p>
+</div>
+
+<h3>Beyond MVP: Additional Capabilities</h3>
+<p>The following capabilities were implemented beyond the original PRD scope:</p>
+
+<table class="compact">
+    <thead>
+        <tr>
+            <th>Feature</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Sensor Runtime Configuration</strong></td>
+            <td>HTTP API for adjusting emission rates, track counts, and type distributions at runtime</td>
+        </tr>
+        <tr>
+            <td><strong>Proposal De-duplication</strong></td>
+            <td>Consolidates multiple sensor hits on the same track into single proposals with hit counting</td>
+        </tr>
+        <tr>
+            <td><strong>Metrics Dashboard</strong></td>
+            <td>Real-time pipeline metrics including per-stage latency percentiles and queue depths</td>
+        </tr>
+        <tr>
+            <td><strong>Track History API</strong></td>
+            <td>Historical detection positions for individual tracks</td>
+        </tr>
+        <tr>
+            <td><strong>Audit Trail UI</strong></td>
+            <td>Searchable, filterable audit log with grouping and timeline views</td>
+        </tr>
+        <tr>
+            <td><strong>Consumer Resilience</strong></td>
+            <td>Automatic NATS consumer recreation on failure for improved reliability</td>
+        </tr>
+        <tr>
+            <td><strong>Classification Biasing</strong></td>
+            <td>Special handling for missile tracks with configurable classification weights</td>
+        </tr>
+    </tbody>
+</table>
+
+<br>
+
+<!-- ============================================
+     Appendix A: Glossary
+     ============================================ -->
+<h2 id="appendix-a"><span class="section-number">A.</span> Appendix: Glossary</h2>
+
+<div class="glossary-grid">
+    <div class="glossary-item">
+        <span class="glossary-term">CJADC2</span>
+        <span class="glossary-def">Combined Joint All-Domain Command and Control</span>
+    </div>
+    <div class="glossary-item">
+        <span class="glossary-term">HIL</span>
+        <span class="glossary-def">Human-in-the-Loop</span>
+    </div>
+    <div class="glossary-item">
+        <span class="glossary-term">OPA</span>
+        <span class="glossary-def">Open Policy Agent</span>
+    </div>
+    <div class="glossary-item">
+        <span class="glossary-term">mTLS</span>
+        <span class="glossary-def">Mutual Transport Layer Security</span>
+    </div>
+    <div class="glossary-item">
+        <span class="glossary-term">Correlation ID</span>
+        <span class="glossary-def">Unique identifier tracing events through the pipeline</span>
+    </div>
+    <div class="glossary-item">
+        <span class="glossary-term">ActionProposal</span>
+        <span class="glossary-def">Suggested response awaiting human approval</span>
+    </div>
+    <div class="glossary-item">
+        <span class="glossary-term">Effect</span>
+        <span class="glossary-def">Simulated outcome of an approved action</span>
+    </div>
+    <div class="glossary-item">
+        <span class="glossary-term">JetStream</span>
+        <span class="glossary-def">NATS persistence layer for at-least-once delivery</span>
+    </div>
+</div>
+
+</body>
+</html>
