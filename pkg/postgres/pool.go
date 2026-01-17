@@ -1521,3 +1521,262 @@ func (p *Pool) Health(ctx context.Context) error {
 	return p.Ping(ctx)
 }
 
+// InterventionRuleRow represents an intervention rule from the database
+type InterventionRuleRow struct {
+	RuleID           string    `json:"rule_id"`
+	Name             string    `json:"name"`
+	Description      *string   `json:"description"`
+	ActionTypes      []string  `json:"action_types"`
+	ThreatLevels     []string  `json:"threat_levels"`
+	Classifications  []string  `json:"classifications"`
+	TrackTypes       []string  `json:"track_types"`
+	MinPriority      *int      `json:"min_priority"`
+	MaxPriority      *int      `json:"max_priority"`
+	RequiresApproval bool      `json:"requires_approval"`
+	AutoApprove      bool      `json:"auto_approve"`
+	Enabled          bool      `json:"enabled"`
+	EvaluationOrder  int       `json:"evaluation_order"`
+	CreatedBy        *string   `json:"created_by"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedBy        *string   `json:"updated_by"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// InterventionRuleFilter defines filter options for intervention rule queries
+type InterventionRuleFilter struct {
+	Enabled    *bool
+	ActionType string
+	Limit      int
+	Offset     int
+}
+
+// ListInterventionRules retrieves intervention rules with optional filtering
+func (p *Pool) ListInterventionRules(ctx context.Context, filter InterventionRuleFilter) ([]InterventionRuleRow, error) {
+	query := `
+		SELECT
+			rule_id, name, description,
+			action_types, threat_levels, classifications, track_types,
+			min_priority, max_priority,
+			requires_approval, auto_approve, enabled, evaluation_order,
+			created_by, created_at, updated_by, updated_at
+		FROM intervention_rules
+		WHERE 1=1
+	`
+	args := []interface{}{}
+	argNum := 1
+
+	if filter.Enabled != nil {
+		query += fmt.Sprintf(" AND enabled = $%d", argNum)
+		args = append(args, *filter.Enabled)
+		argNum++
+	}
+
+	if filter.ActionType != "" {
+		query += fmt.Sprintf(" AND $%d = ANY(action_types)", argNum)
+		args = append(args, filter.ActionType)
+		argNum++
+	}
+
+	query += " ORDER BY evaluation_order ASC, created_at DESC"
+
+	if filter.Limit > 0 {
+		query += fmt.Sprintf(" LIMIT $%d", argNum)
+		args = append(args, filter.Limit)
+		argNum++
+	}
+
+	if filter.Offset > 0 {
+		query += fmt.Sprintf(" OFFSET $%d", argNum)
+		args = append(args, filter.Offset)
+	}
+
+	rows, err := p.Query(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query intervention rules: %w", err)
+	}
+	defer rows.Close()
+
+	var rules []InterventionRuleRow
+	for rows.Next() {
+		var r InterventionRuleRow
+		err := rows.Scan(
+			&r.RuleID, &r.Name, &r.Description,
+			&r.ActionTypes, &r.ThreatLevels, &r.Classifications, &r.TrackTypes,
+			&r.MinPriority, &r.MaxPriority,
+			&r.RequiresApproval, &r.AutoApprove, &r.Enabled, &r.EvaluationOrder,
+			&r.CreatedBy, &r.CreatedAt, &r.UpdatedBy, &r.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan intervention rule: %w", err)
+		}
+		rules = append(rules, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating intervention rules: %w", err)
+	}
+
+	return rules, nil
+}
+
+// GetInterventionRule retrieves a single intervention rule by ID
+func (p *Pool) GetInterventionRule(ctx context.Context, ruleID string) (*InterventionRuleRow, error) {
+	query := `
+		SELECT
+			rule_id, name, description,
+			action_types, threat_levels, classifications, track_types,
+			min_priority, max_priority,
+			requires_approval, auto_approve, enabled, evaluation_order,
+			created_by, created_at, updated_by, updated_at
+		FROM intervention_rules
+		WHERE rule_id = $1
+	`
+
+	var r InterventionRuleRow
+	err := p.QueryRow(ctx, query, ruleID).Scan(
+		&r.RuleID, &r.Name, &r.Description,
+		&r.ActionTypes, &r.ThreatLevels, &r.Classifications, &r.TrackTypes,
+		&r.MinPriority, &r.MaxPriority,
+		&r.RequiresApproval, &r.AutoApprove, &r.Enabled, &r.EvaluationOrder,
+		&r.CreatedBy, &r.CreatedAt, &r.UpdatedBy, &r.UpdatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get intervention rule: %w", err)
+	}
+
+	return &r, nil
+}
+
+// CreateInterventionRule inserts a new intervention rule
+func (p *Pool) CreateInterventionRule(ctx context.Context, rule *InterventionRuleRow) error {
+	query := `
+		INSERT INTO intervention_rules (
+			rule_id, name, description,
+			action_types, threat_levels, classifications, track_types,
+			min_priority, max_priority,
+			requires_approval, auto_approve, enabled, evaluation_order,
+			created_by, updated_by
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		RETURNING created_at, updated_at
+	`
+
+	err := p.QueryRow(ctx, query,
+		rule.RuleID, rule.Name, rule.Description,
+		rule.ActionTypes, rule.ThreatLevels, rule.Classifications, rule.TrackTypes,
+		rule.MinPriority, rule.MaxPriority,
+		rule.RequiresApproval, rule.AutoApprove, rule.Enabled, rule.EvaluationOrder,
+		rule.CreatedBy, rule.UpdatedBy,
+	).Scan(&rule.CreatedAt, &rule.UpdatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to create intervention rule: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateInterventionRule updates an existing intervention rule
+func (p *Pool) UpdateInterventionRule(ctx context.Context, rule *InterventionRuleRow) error {
+	query := `
+		UPDATE intervention_rules SET
+			name = $2,
+			description = $3,
+			action_types = $4,
+			threat_levels = $5,
+			classifications = $6,
+			track_types = $7,
+			min_priority = $8,
+			max_priority = $9,
+			requires_approval = $10,
+			auto_approve = $11,
+			enabled = $12,
+			evaluation_order = $13,
+			updated_by = $14
+		WHERE rule_id = $1
+		RETURNING updated_at
+	`
+
+	err := p.QueryRow(ctx, query,
+		rule.RuleID, rule.Name, rule.Description,
+		rule.ActionTypes, rule.ThreatLevels, rule.Classifications, rule.TrackTypes,
+		rule.MinPriority, rule.MaxPriority,
+		rule.RequiresApproval, rule.AutoApprove, rule.Enabled, rule.EvaluationOrder,
+		rule.UpdatedBy,
+	).Scan(&rule.UpdatedAt)
+	if err == pgx.ErrNoRows {
+		return fmt.Errorf("intervention rule not found")
+	}
+	if err != nil {
+		return fmt.Errorf("failed to update intervention rule: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteInterventionRule deletes an intervention rule by ID
+func (p *Pool) DeleteInterventionRule(ctx context.Context, ruleID string) error {
+	query := `DELETE FROM intervention_rules WHERE rule_id = $1`
+
+	tag, err := p.Exec(ctx, query, ruleID)
+	if err != nil {
+		return fmt.Errorf("failed to delete intervention rule: %w", err)
+	}
+
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("intervention rule not found")
+	}
+
+	return nil
+}
+
+// GetMatchingInterventionRules retrieves rules that match the given criteria
+// Rules are returned in evaluation_order, so the first match should be used
+func (p *Pool) GetMatchingInterventionRules(ctx context.Context, actionType, classification, threatLevel string, priority int) ([]InterventionRuleRow, error) {
+	query := `
+		SELECT
+			rule_id, name, description,
+			action_types, threat_levels, classifications, track_types,
+			min_priority, max_priority,
+			requires_approval, auto_approve, enabled, evaluation_order,
+			created_by, created_at, updated_by, updated_at
+		FROM intervention_rules
+		WHERE enabled = true
+		  AND (array_length(action_types, 1) IS NULL OR action_types = '{}' OR $1 = ANY(action_types))
+		  AND (array_length(classifications, 1) IS NULL OR classifications = '{}' OR $2 = ANY(classifications))
+		  AND (array_length(threat_levels, 1) IS NULL OR threat_levels = '{}' OR $3 = ANY(threat_levels))
+		  AND (min_priority IS NULL OR $4 >= min_priority)
+		  AND (max_priority IS NULL OR $4 <= max_priority)
+		ORDER BY evaluation_order ASC
+	`
+
+	rows, err := p.Query(ctx, query, actionType, classification, threatLevel, priority)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query matching intervention rules: %w", err)
+	}
+	defer rows.Close()
+
+	var rules []InterventionRuleRow
+	for rows.Next() {
+		var r InterventionRuleRow
+		err := rows.Scan(
+			&r.RuleID, &r.Name, &r.Description,
+			&r.ActionTypes, &r.ThreatLevels, &r.Classifications, &r.TrackTypes,
+			&r.MinPriority, &r.MaxPriority,
+			&r.RequiresApproval, &r.AutoApprove, &r.Enabled, &r.EvaluationOrder,
+			&r.CreatedBy, &r.CreatedAt, &r.UpdatedBy, &r.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan matching intervention rule: %w", err)
+		}
+		rules = append(rules, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating matching intervention rules: %w", err)
+	}
+
+	return rules, nil
+}
+

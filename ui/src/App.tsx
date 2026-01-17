@@ -11,6 +11,7 @@ import { ProposalQueue } from './components/ProposalQueue';
 import { DecisionModal } from './components/DecisionModal';
 import { MetricsDashboard } from './components/MetricsDashboard';
 import { AuditTrail } from './components/AuditTrail';
+import { InterventionRulesPanel } from './components/InterventionRulesPanel';
 import { SensorControlPage } from './pages/SensorControlPage';
 import { sensorApi } from './api/sensor';
 import { classifierApi } from './api/classifier';
@@ -28,7 +29,7 @@ const queryClient = new QueryClient({
 });
 
 // Tab type
-type TabId = 'tracks' | 'proposals' | 'metrics' | 'audit';
+type TabId = 'tracks' | 'proposals' | 'metrics' | 'audit' | 'rules';
 
 // Live/Paused indicator
 function LiveIndicator({ connected, paused }: { connected: boolean; paused: boolean }) {
@@ -113,6 +114,11 @@ function TabNavigation({
       label: 'Audit Trail',
       icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2',
     },
+    {
+      id: 'rules',
+      label: 'Rules',
+      icon: 'M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4',
+    },
   ];
 
   return (
@@ -149,7 +155,7 @@ function TabNavigation({
 }
 
 // Valid tab IDs for URL validation
-const validTabs: TabId[] = ['tracks', 'proposals', 'metrics', 'audit'];
+const validTabs: TabId[] = ['tracks', 'proposals', 'metrics', 'audit', 'rules'];
 
 // Main dashboard content
 function DashboardContent() {
@@ -329,6 +335,9 @@ function DashboardContent() {
 
       case 'audit':
         return <AuditTrail />;
+
+      case 'rules':
+        return <InterventionRulesPanel />;
 
       default:
         return null;

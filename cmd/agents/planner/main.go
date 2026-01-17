@@ -17,6 +17,7 @@ import (
 	natsutil "github.com/agile-defense/cjadc2/pkg/nats"
 	"github.com/agile-defense/cjadc2/pkg/opa"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -29,6 +30,7 @@ type PlannerAgent struct {
 	logger           zerolog.Logger
 	consumer         jetstream.Consumer
 	opaClient        *opa.Client
+	db               *pgxpool.Pool
 	proposalsCreated prometheus.Counter
 	proposalsDenied  prometheus.Counter
 }
@@ -67,6 +69,11 @@ func (a *PlannerAgent) Run(ctx context.Context) error {
 	// Start base agent (connects to NATS)
 	if err := a.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start base agent: %w", err)
+	}
+
+	// Connect to PostgreSQL for intervention rules
+	if err := a.connectDB(ctx); err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Ensure streams exist
@@ -179,7 +186,7 @@ func (a *PlannerAgent) processMessage(ctx context.Context, msg jetstream.Msg) er
 	actionType, priority, rationale := a.determineAction(&track)
 
 	// Check if this action requires human-in-the-loop approval
-	if !a.requiresHumanApproval(actionType, priority) {
+	if !a.requiresHumanApproval(actionType, priority, track.Classification, track.ThreatLevel) {
 		// Passive action - log and skip proposal creation
 		duration := time.Since(start)
 		a.RecordMessage("success", "correlated_track")
@@ -418,12 +425,141 @@ func (a *PlannerAgent) determineExpiration(priority int) time.Duration {
 	}
 }
 
+// connectDB establishes PostgreSQL connection
+func (a *PlannerAgent) connectDB(ctx context.Context) error {
+	dbURL := a.Config().DBUrl
+	if dbURL == "" {
+		dbURL = "postgres://cjadc2:devpassword@localhost:5432/cjadc2?sslmode=disable"
+	}
+
+	config, err := pgxpool.ParseConfig(dbURL)
+	if err != nil {
+		return fmt.Errorf("failed to parse database config: %w", err)
+	}
+
+	config.MaxConns = 5
+	config.MinConns = 1
+	config.MaxConnLifetime = time.Hour
+	config.MaxConnIdleTime = 30 * time.Minute
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return fmt.Errorf("failed to create pool: %w", err)
+	}
+
+	// Test connection
+	if err := pool.Ping(ctx); err != nil {
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	a.db = pool
+	a.logger.Info().Msg("Connected to PostgreSQL for intervention rules")
+	return nil
+}
+
+// interventionRule represents a rule from the database
+type interventionRule struct {
+	RuleID           string
+	Name             string
+	ActionTypes      []string
+	ThreatLevels     []string
+	Classifications  []string
+	TrackTypes       []string
+	MinPriority      *int
+	MaxPriority      *int
+	RequiresApproval bool
+	AutoApprove      bool
+	EvaluationOrder  int
+}
+
+// getMatchingInterventionRules queries the database for rules that match the given criteria
+func (a *PlannerAgent) getMatchingInterventionRules(ctx context.Context, actionType, classification, threatLevel string, priority int) ([]interventionRule, error) {
+	query := `
+		SELECT rule_id, name, action_types, threat_levels, classifications, track_types,
+		       min_priority, max_priority, requires_approval, auto_approve, evaluation_order
+		FROM intervention_rules
+		WHERE enabled = true
+		  AND (cardinality(action_types) = 0 OR $1 = ANY(action_types))
+		  AND (cardinality(classifications) = 0 OR $2 = ANY(classifications))
+		  AND (cardinality(threat_levels) = 0 OR $3 = ANY(threat_levels))
+		  AND (min_priority IS NULL OR $4 >= min_priority)
+		  AND (max_priority IS NULL OR $4 <= max_priority)
+		ORDER BY evaluation_order ASC
+	`
+
+	rows, err := a.db.Query(ctx, query, actionType, classification, threatLevel, priority)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query intervention rules: %w", err)
+	}
+	defer rows.Close()
+
+	var rules []interventionRule
+	for rows.Next() {
+		var rule interventionRule
+		err := rows.Scan(
+			&rule.RuleID,
+			&rule.Name,
+			&rule.ActionTypes,
+			&rule.ThreatLevels,
+			&rule.Classifications,
+			&rule.TrackTypes,
+			&rule.MinPriority,
+			&rule.MaxPriority,
+			&rule.RequiresApproval,
+			&rule.AutoApprove,
+			&rule.EvaluationOrder,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan intervention rule: %w", err)
+		}
+		rules = append(rules, rule)
+	}
+
+	return rules, rows.Err()
+}
+
 // requiresHumanApproval determines if an action needs human-in-the-loop approval
+// Uses configurable intervention rules from the database
+// Falls back to hardcoded defaults if database is unavailable
+func (a *PlannerAgent) requiresHumanApproval(actionType string, priority int, classification, threatLevel string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Query matching intervention rules from database
+	rules, err := a.getMatchingInterventionRules(ctx, actionType, classification, threatLevel, priority)
+	if err != nil {
+		a.logger.Warn().Err(err).Msg("Failed to query intervention rules, using fallback logic")
+		return a.fallbackRequiresHumanApproval(actionType, priority)
+	}
+
+	// If we have matching rules, use the first one (highest priority by evaluation_order)
+	if len(rules) > 0 {
+		rule := rules[0]
+		a.logger.Debug().
+			Str("rule_id", rule.RuleID).
+			Str("rule_name", rule.Name).
+			Bool("requires_approval", rule.RequiresApproval).
+			Bool("auto_approve", rule.AutoApprove).
+			Msg("Using intervention rule")
+
+		// If auto_approve is true, no human approval needed
+		if rule.AutoApprove {
+			return false
+		}
+		return rule.RequiresApproval
+	}
+
+	// No matching rules found - use fallback logic for safety
+	a.logger.Debug().Msg("No matching intervention rules found, using fallback logic")
+	return a.fallbackRequiresHumanApproval(actionType, priority)
+}
+
+// fallbackRequiresHumanApproval provides default behavior when database is unavailable
 // Based on CJADC2 doctrine:
 // - Kinetic/active actions (engage, intercept) ALWAYS require HITL
 // - Identification actions require HITL when priority is high
 // - Passive actions (track, monitor, ignore) do NOT require HITL
-func (a *PlannerAgent) requiresHumanApproval(actionType string, priority int) bool {
+func (a *PlannerAgent) fallbackRequiresHumanApproval(actionType string, priority int) bool {
 	switch actionType {
 	case "engage":
 		// Kinetic action - ALWAYS requires human approval
@@ -450,7 +586,7 @@ func (a *PlannerAgent) validateProposal(ctx context.Context, proposal *messages.
 		ctx,
 		proposal,
 		track,
-		true,          // track exists
+		true,            // track exists
 		[]interface{}{}, // no other pending proposals (simplified)
 	)
 	if err != nil {
@@ -467,6 +603,7 @@ func main() {
 		Type:    agent.AgentTypePlanner,
 		NATSUrl: getEnv("NATS_URL", "nats://localhost:4222"),
 		OPAUrl:  getEnv("OPA_URL", "http://localhost:8181"),
+		DBUrl:   getEnv("POSTGRES_URL", "postgres://cjadc2:devpassword@localhost:5432/cjadc2?sslmode=disable"),
 		Secret:  []byte(getEnv("AGENT_SECRET", "planner-secret")),
 	}
 

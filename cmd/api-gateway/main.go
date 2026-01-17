@@ -353,6 +353,10 @@ func setupRouter(cfg Config, db *postgres.Pool, nc *nats.Conn, opaClient *opa.Cl
 		classifierHandler := handler.NewClassifierHandler(classifierURL, log.Logger)
 		r.Mount("/classifier", classifierHandler.Routes())
 
+		// Intervention rules handler
+		interventionRuleHandler := handler.NewInterventionRuleHandler(db, log.Logger)
+		r.Mount("/intervention-rules", interventionRuleHandler.Routes())
+
 		// Clear all data endpoint
 		r.Post("/clear", clearHandler(db))
 	})

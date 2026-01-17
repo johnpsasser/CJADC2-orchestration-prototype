@@ -259,3 +259,41 @@ export interface ClassificationWeights {
   neutral: number;
   unknown: number;
 }
+
+// Intervention rule for configuring human-in-the-loop requirements
+export interface InterventionRule {
+  rule_id: string;
+  name: string;
+  description: string | null;
+  action_types: string[];
+  threat_levels: string[];
+  classifications: string[];
+  track_types: string[];
+  min_priority: number | null;
+  max_priority: number | null;
+  requires_approval: boolean;
+  auto_approve: boolean;
+  enabled: boolean;
+  evaluation_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_by: string | null;
+  updated_at: string;
+}
+
+export interface InterventionRuleCreate {
+  name: string;
+  description?: string;
+  action_types: string[];
+  threat_levels?: string[];
+  classifications?: string[];
+  track_types?: string[];
+  min_priority?: number;
+  max_priority?: number;
+  requires_approval: boolean;
+  auto_approve?: boolean;
+  enabled?: boolean;
+  evaluation_order?: number;
+}
+
+export interface InterventionRuleUpdate extends Partial<InterventionRuleCreate> {}

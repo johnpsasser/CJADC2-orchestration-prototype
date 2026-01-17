@@ -10,6 +10,9 @@ import type {
   EffectLog,
   SystemMetrics,
   AuditEntry,
+  InterventionRule,
+  InterventionRuleCreate,
+  InterventionRuleUpdate,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
@@ -290,6 +293,68 @@ export const healthApi = {
   },
 };
 
+// Intervention rules API endpoints
+export const interventionRulesApi = {
+  // Get all intervention rules
+  getAll: async (params?: { enabled?: boolean; limit?: number }, correlationId?: string): Promise<APIResponse<InterventionRule[]>> => {
+    const searchParams = new URLSearchParams();
+    if (params?.enabled !== undefined) {
+      searchParams.set('enabled', String(params.enabled));
+    }
+    if (params?.limit) {
+      searchParams.set('limit', String(params.limit));
+    }
+    const query = searchParams.toString();
+    const url = `/api/v1/intervention-rules${query ? `?${query}` : ''}`;
+    const response = await apiFetch<{ rules: InterventionRule[] }>(url, {}, correlationId);
+    return { ...response, data: response.data.rules || [] };
+  },
+
+  // Get a single intervention rule by ID
+  getById: async (ruleId: string, correlationId?: string): Promise<APIResponse<InterventionRule>> => {
+    return apiFetch<InterventionRule>(
+      `/api/v1/intervention-rules/${encodeURIComponent(ruleId)}`,
+      {},
+      correlationId
+    );
+  },
+
+  // Create a new intervention rule
+  create: async (rule: InterventionRuleCreate, correlationId?: string): Promise<APIResponse<InterventionRule>> => {
+    return apiFetch<InterventionRule>(
+      '/api/v1/intervention-rules',
+      {
+        method: 'POST',
+        body: JSON.stringify(rule),
+      },
+      correlationId
+    );
+  },
+
+  // Update an existing intervention rule
+  update: async (ruleId: string, rule: InterventionRuleUpdate, correlationId?: string): Promise<APIResponse<InterventionRule>> => {
+    return apiFetch<InterventionRule>(
+      `/api/v1/intervention-rules/${encodeURIComponent(ruleId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(rule),
+      },
+      correlationId
+    );
+  },
+
+  // Delete an intervention rule
+  delete: async (ruleId: string, correlationId?: string): Promise<APIResponse<void>> => {
+    return apiFetch<void>(
+      `/api/v1/intervention-rules/${encodeURIComponent(ruleId)}`,
+      {
+        method: 'DELETE',
+      },
+      correlationId
+    );
+  },
+};
+
 // Clear all data response
 interface ClearAllResponse {
   success: boolean;
@@ -328,6 +393,7 @@ export const api = {
   audit: auditApi,
   health: healthApi,
   clear: clearApi,
+  interventionRules: interventionRulesApi,
 };
 
 export default api;
