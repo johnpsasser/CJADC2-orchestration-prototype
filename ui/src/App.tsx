@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
 
 import { useWebSocket } from './hooks/useWebSocket';
@@ -148,10 +148,22 @@ function TabNavigation({
   );
 }
 
+// Valid tab IDs for URL validation
+const validTabs: TabId[] = ['tracks', 'proposals', 'metrics', 'audit'];
+
 // Main dashboard content
 function DashboardContent() {
-  const [activeTab, setActiveTab] = useState<TabId>('tracks');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [wsMetrics, setWsMetrics] = useState<SystemMetrics | null>(null);
+
+  // Get active tab from URL, default to 'tracks'
+  const tabFromUrl = searchParams.get('tab') as TabId | null;
+  const activeTab: TabId = tabFromUrl && validTabs.includes(tabFromUrl) ? tabFromUrl : 'tracks';
+
+  // Update URL when tab changes
+  const setActiveTab = useCallback((tab: TabId) => {
+    setSearchParams({ tab });
+  }, [setSearchParams]);
 
   // Fetch sensor config for LIVE/PAUSED indicator
   const { data: sensorConfig } = useQuery({
