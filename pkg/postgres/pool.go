@@ -314,7 +314,7 @@ func (p *Pool) UpsertTrack(ctx context.Context, track *messages.CorrelatedTrack)
 			velocity_heading = EXCLUDED.velocity_heading,
 			confidence = EXCLUDED.confidence,
 			sources = EXCLUDED.sources,
-			detection_count = EXCLUDED.detection_count,
+			detection_count = tracks.detection_count + 1,
 			last_updated = EXCLUDED.last_updated,
 			state = 'active'
 	`
@@ -1147,19 +1147,24 @@ func (p *Pool) GetRealTimeStageMetrics(ctx context.Context) ([]RealTimeStageMetr
 
 // GetMessagesPerMinute calculates current message throughput rate
 func (p *Pool) GetMessagesPerMinute(ctx context.Context) (float64, error) {
-	// Sum detection_count from tracks updated in the last minute
-	// This gives the total number of detection messages processed
+	// Calculate per-track detection rate and sum across all active tracks
+	// Each track's rate = detection_count / track_age_seconds * 60
+	// This gives the actual messages/minute based on observed behavior
 	query := `
-		SELECT COALESCE(SUM(detection_count), 0) as total_detections
+		SELECT COALESCE(SUM(
+			detection_count::float / GREATEST(EXTRACT(EPOCH FROM (NOW() - first_seen)), 1) * 60
+		), 0) as messages_per_minute
 		FROM tracks
 		WHERE last_updated >= NOW() - INTERVAL '1 minute'
+		  AND first_seen IS NOT NULL
+		  AND detection_count > 0
 	`
-	var totalDetections int64
-	err := p.QueryRow(ctx, query).Scan(&totalDetections)
+	var rate float64
+	err := p.QueryRow(ctx, query).Scan(&rate)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get messages per minute: %w", err)
 	}
-	return float64(totalDetections), nil
+	return rate, nil
 }
 
 // GetEndToEndLatencyMetrics returns real-time E2E latency percentiles
