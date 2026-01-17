@@ -883,7 +883,7 @@ func (s *SensorAgent) addSingleTrackLocked(index int) {
 		speed = 300 + rand.Float64()*700  // 300-1000 m/s (Mach 1-3)
 	default: // unknown
 		alt = rand.Float64() * 12000     // Random altitude
-		speed = 100 + rand.Float64()*400 // 100-500 m/s
+		speed = 200 + rand.Float64()*500 // 200-700 m/s (higher range to trigger threat assessments)
 	}
 
 	s.tracks[id] = &simulatedTrack{
@@ -1049,10 +1049,18 @@ func (s *SensorAgent) updateTrackPosition(track *simulatedTrack, interval time.D
 		}
 	}
 
-	// Occasionally change speed
-	if rand.Float64() < 0.05 {
-		track.velocity.Speed += (rand.Float64() - 0.5) * 50
-		track.velocity.Speed = math.Max(50, math.Min(600, track.velocity.Speed))
+	// Occasionally change speed - biased toward higher speeds to trigger threat assessments
+	if rand.Float64() < 0.10 {
+		// Base change with upward bias
+		change := (rand.Float64() - 0.3) * 80 // Biased +28 m/s average, range -24 to +56 m/s
+
+		// Occasional speed spike (10% chance of major acceleration)
+		if rand.Float64() < 0.10 {
+			change += 100 + rand.Float64()*150 // Add 100-250 m/s spike
+		}
+
+		track.velocity.Speed += change
+		track.velocity.Speed = math.Max(50, math.Min(800, track.velocity.Speed))
 	}
 
 	// Occasionally change altitude (for aircraft and missiles)
